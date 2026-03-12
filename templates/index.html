@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>League Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  {% include '_theme_head.html' %}
+</head>
+<body class="app-theme antialiased">
+  <div class="page-shell">
+    <section class="hero-shell glass-card rounded-3xl p-5 sm:p-7 fade-in">
+      <div class="dashboard-grid-wide">
+        <div>
+          <p class="section-title">Matchday Dashboard</p>
+          <h1 class="hero-title mt-2">League Tracker</h1>
+          <p class="text-soft mt-3 max-w-2xl text-sm sm:text-base">
+            Keep standings, fixtures, and season admin in one place without the usual spreadsheet sprawl.
+          </p>
+        </div>
+        <div class="flex flex-col sm:items-end gap-3 mt-4 sm:mt-0">
+          <div class="header-actions w-full sm:w-auto sm:justify-end">
+            {% if g.user.is_admin %}
+            <a href="/admin-panel" class="btn-accent w-full sm:w-auto text-center">Open Admin</a>
+            <button onclick="toggleTeamPanel()" class="btn-brand w-full sm:w-auto">Manage Teams</button>
+            {% endif %}
+            <form action="/logout" method="POST" class="w-full sm:w-auto">
+              <button type="submit" class="btn-secondary w-full sm:w-auto">Logout</button>
+            </form>
+          </div>
+          <div class="chip chip-neutral user-chip">Signed in as {{ g.user.username }}</div>
+        </div>
+      </div>
+
+      <div class="metric-grid mt-6">
+        <div class="metric-card glass-card-muted">
+          <span class="metric-label">Teams</span>
+          <span class="metric-value">{{ table|length }}</span>
+        </div>
+        <div class="metric-card glass-card-muted">
+          <span class="metric-label">Upcoming</span>
+          <span class="metric-value">{{ upcoming|length }}</span>
+        </div>
+        <div class="metric-card glass-card-muted">
+          <span class="metric-label">Results</span>
+          <span class="metric-value">{{ results|length }}</span>
+        </div>
+        <div class="metric-card glass-card-muted">
+          <span class="metric-label">Mode</span>
+          <span class="metric-value text-lg sm:text-xl">{{ 'Admin' if g.user.is_admin else 'Viewer' }}</span>
+        </div>
+      </div>
+    </section>
+
+    <div class="dashboard-grid mt-5 sm:mt-6">
+      <section class="glass-card rounded-3xl p-5 sm:p-6 fade-in stagger-1">
+        <div class="panel-head">
+          <div class="panel-copy">
+            <p class="section-title">Standings</p>
+            <h2 class="panel-title mt-2">League table</h2>
+            <p class="text-soft text-sm">Quick scan for rank, form, and the points race.</p>
+          </div>
+          {% if table %}
+          <div class="chip chip-brand">Leader: {{ table[0].team }}</div>
+          {% endif %}
+        </div>
+
+        <div class="table-shell">
+          <table class="league-table">
+            <thead>
+              <tr>
+                <th class="text-left">Pos</th>
+                <th class="text-left">Team</th>
+                <th class="text-center">P</th>
+                <th class="text-center">W</th>
+                <th class="text-center">D</th>
+                <th class="text-center">L</th>
+                <th class="text-center">GD</th>
+                <th class="text-center">Pts</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for team in table %}
+              <tr>
+                <td><span class="rank-pill">{{ loop.index }}</span></td>
+                <td>
+                  <div class="team-cell">
+                    <span class="team-badge"></span>
+                    <span class="font-semibold">{{ team.team }}</span>
+                  </div>
+                </td>
+                <td class="text-center">{{ team.played }}</td>
+                <td class="text-center">{{ team.won }}</td>
+                <td class="text-center">{{ team.drawn }}</td>
+                <td class="text-center">{{ team.lost }}</td>
+                <td class="text-center">{{ team.gd }}</td>
+                <td class="text-center"><span class="points-pill">{{ team.points }}</span></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+      </section>
+
+      <section class="glass-card rounded-3xl p-5 sm:p-6 fade-in stagger-2">
+        <div class="panel-head">
+          <div class="panel-copy">
+            <p class="section-title">Schedule</p>
+            <h2 class="panel-title mt-2">Fixtures and results</h2>
+            <p class="text-soft text-sm">Use the live panel for upcoming matches and recent scorelines.</p>
+          </div>
+          <div class="tab-row">
+            <button type="button" id="tab-fixtures" class="tab-button tab-active" onclick="showTab('fixtures')">Fixtures</button>
+            <button type="button" id="tab-results" class="tab-button tab-inactive" onclick="showTab('results')">Results</button>
+          </div>
+        </div>
+
+        <div id="fixtures-panel" class="fixture-list">
+          {% if upcoming %}
+            {% for match in upcoming %}
+            <article class="fixture-card">
+              <div class="fixture-card-top">
+                <div class="fixture-meta">
+                  <span class="chip chip-brand">Upcoming</span>
+                  <span class="fixture-meta-item">{{ match.fixture_time.strftime('%d %b %Y') }}</span>
+                  <span class="fixture-meta-item">{{ match.fixture_time.strftime('%H:%M') }}</span>
+                </div>
+              </div>
+
+              <div class="fixture-matchup">
+                <div class="fixture-team-block text-left sm:text-left">
+                  <span class="fixture-team-name">{{ match.home_team.name }}</span>
+                  <span class="fixture-team-sub">Home</span>
+                </div>
+                <div class="fixture-divider">vs</div>
+                <div class="fixture-team-block text-right sm:text-right">
+                  <span class="fixture-team-name">{{ match.away_team.name }}</span>
+                  <span class="fixture-team-sub">Away</span>
+                </div>
+              </div>
+
+              <div class="section-grid fixture-actions-grid">
+                <form method="POST" class="glass-card-muted rounded-2xl p-4 fixture-action-card">
+                  <input type="hidden" name="fixture_id" value="{{ match.id }}">
+                  <div class="score-inputs mt-3">
+                    <div class="score-box">
+                      <label class="field-label score-label" for="home_goals_{{ match.id }}" title="{{ match.home_team.name }}">{{ match.home_team.name }}</label>
+                      <input id="home_goals_{{ match.id }}" type="number" name="home_goals" min="0" required class="fixture-score input-theme rounded-md">
+                    </div>
+                    <div class="score-box">
+                      <label class="field-label score-label" for="away_goals_{{ match.id }}" title="{{ match.away_team.name }}">{{ match.away_team.name }}</label>
+                      <input id="away_goals_{{ match.id }}" type="number" name="away_goals" min="0" required class="fixture-score input-theme rounded-md">
+                    </div>
+                  </div>
+                  <button type="submit" class="btn-accent w-full mt-4">Save Result</button>
+                </form>
+
+                <form action="/update_fixture_datetime" method="POST" class="glass-card-muted rounded-2xl p-4 fixture-action-card fixture-reschedule-card">
+                  <input type="hidden" name="fixture_id" value="{{ match.id }}">
+                  <div class="reschedule-controls mt-3">
+                    <div class="control-block">
+                      <label class="field-label" for="fixture_date_{{ match.id }}">Kickoff time</label>
+                      <input id="fixture_date_{{ match.id }}" type="datetime-local" name="fixture_date" value="{{ match.fixture_time.strftime('%Y-%m-%dT%H:%M') }}" required class="fixture-date kickoff-picker input-theme rounded-md">
+                    </div>
+                    <button type="submit" class="btn-secondary">Update Time</button>
+                  </div>
+                </form>
+              </div>
+            </article>
+            {% endfor %}
+          {% else %}
+            <div class="empty-state">No upcoming fixtures scheduled right now.</div>
+          {% endif %}
+        </div>
+
+        <div id="results-panel" class="fixture-list hidden">
+          {% if results %}
+            {% for match in results %}
+            <article class="fixture-card">
+              <div class="fixture-card-top">
+                <div class="fixture-meta">
+                  <span class="chip chip-accent">Final</span>
+                  <span>{{ match.fixture_time.strftime('%d %b %Y') }}</span>
+                </div>
+              </div>
+
+              <div class="fixture-matchup">
+                <div class="fixture-team-block text-left sm:text-left">
+                  <span class="fixture-team-name">{{ match.home_team.name }}</span>
+                  <span class="fixture-team-sub">Home</span>
+                </div>
+                <div class="result-score">{{ match.home_goals }} - {{ match.away_goals }}</div>
+                <div class="fixture-team-block text-right sm:text-right">
+                  <span class="fixture-team-name">{{ match.away_team.name }}</span>
+                  <span class="fixture-team-sub">Away</span>
+                </div>
+              </div>
+            </article>
+            {% endfor %}
+          {% else %}
+            <div class="empty-state">No results have been recorded yet.</div>
+          {% endif %}
+        </div>
+      </section>
+    </div>
+  </div>
+
+  {% if g.user.is_admin %}
+  <aside id="teamPanel" class="drawer-panel">
+    <div class="drawer-head">
+      <div>
+        <p class="section-title">Club Setup</p>
+        <h3 class="panel-title mt-2">Manage teams</h3>
+        <p class="text-soft text-sm mt-2">Add clubs quickly and keep a live overview of the league roster.</p>
+      </div>
+      <button onclick="toggleTeamPanel()" class="drawer-close" aria-label="Close manage teams panel">x</button>
+    </div>
+
+    <div class="glass-card-muted rounded-2xl p-4 mb-4">
+      <div class="field-label">Current clubs</div>
+      <div class="team-stack mt-3">
+        {% for team in table %}
+        <div class="entity-row rounded-2xl bg-white bg-opacity-70 px-4 py-3 border border-line">
+          <div class="team-cell">
+            <span class="team-badge"></span>
+            <span class="font-semibold">{{ team.team }}</span>
+          </div>
+          <span class="chip chip-neutral">{{ team.points }} pts</span>
+        </div>
+        {% else %}
+        <div class="empty-state">No teams yet. Add the first club to generate the season.</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <form action="/add_team" method="POST" class="glass-card rounded-2xl p-4 space-y-4">
+      <div>
+        <label class="field-label" for="team_name">New team</label>
+        <input id="team_name" type="text" name="team_name" placeholder="Enter team name" required class="w-full mt-2 input-theme rounded-md">
+      </div>
+      <button type="submit" class="btn-brand w-full">Add Team</button>
+    </form>
+  </aside>
+
+  <div id="overlay" class="drawer-overlay hidden" onclick="toggleTeamPanel()"></div>
+  {% endif %}
+
+  <script>
+    function showTab(tab) {
+      const fixturesPanel = document.getElementById('fixtures-panel');
+      const resultsPanel = document.getElementById('results-panel');
+      const tabFixtures = document.getElementById('tab-fixtures');
+      const tabResults = document.getElementById('tab-results');
+
+      if (tab === 'fixtures') {
+        fixturesPanel.classList.remove('hidden');
+        resultsPanel.classList.add('hidden');
+        tabFixtures.classList.add('tab-active');
+        tabFixtures.classList.remove('tab-inactive');
+        tabResults.classList.remove('tab-active');
+        tabResults.classList.add('tab-inactive');
+      } else {
+        fixturesPanel.classList.add('hidden');
+        resultsPanel.classList.remove('hidden');
+        tabResults.classList.add('tab-active');
+        tabResults.classList.remove('tab-inactive');
+        tabFixtures.classList.remove('tab-active');
+        tabFixtures.classList.add('tab-inactive');
+      }
+    }
+
+    function toggleTeamPanel() {
+      {% if g.user.is_admin %}
+      const panel = document.getElementById('teamPanel');
+      const overlay = document.getElementById('overlay');
+      panel.classList.toggle('open');
+      overlay.classList.toggle('hidden');
+      {% endif %}
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Login</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  {% include '_theme_head.html' %}
+</head>
+<body class="app-theme antialiased">
+  <div class="page-shell min-h-screen flex items-center justify-center">
+    <div class="glass-card rounded-3xl w-full max-w-md p-6 sm:p-8 fade-in">
+      <div class="text-center">
+        <p class="section-title">League Access</p>
+        <h1 class="display-title mt-3">League Tracker</h1>
+        <p class="text-soft text-sm mt-3">Sign in to continue.</p>
+      </div>
+
+      {% if error %}
+      <div class="mt-6 p-3 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-sm">
+        {{ error }}
+      </div>
+      {% endif %}
+
+      <form method="POST" class="space-y-4 mt-6">
+        <div>
+          <label class="field-label" for="username">Username</label>
+          <input id="username" name="username" required class="w-full mt-2 input-theme rounded-md">
+        </div>
+        <div>
+          <label class="field-label" for="password">Password</label>
+          <input id="password" name="password" type="password" required class="w-full mt-2 input-theme rounded-md">
+        </div>
+        <button type="submit" class="btn-brand w-full">Sign In</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

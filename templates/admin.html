@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin Panel</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  {% include '_theme_head.html' %}
+</head>
+<body class="app-theme antialiased">
+  <div class="page-shell">
+    <section class="glass-card rounded-3xl p-5 sm:p-7 fade-in">
+      <div class="dashboard-grid-wide">
+        <div>
+          <p class="section-title">Control Center</p>
+          <h1 class="display-title mt-2">League Admin Panel</h1>
+          <p class="text-soft mt-3 max-w-2xl text-sm sm:text-base">
+            Run the season from one screen: teams, users, fixtures, and reset controls without extra clicks.
+          </p>
+        </div>
+        <div class="flex flex-col sm:items-end gap-3 mt-4 sm:mt-0">
+          <div class="header-actions w-full sm:w-auto sm:justify-end">
+            <a href="/" class="btn-brand w-full sm:w-auto text-center">Back to League</a>
+            <form action="/logout" method="POST" class="w-full sm:w-auto">
+              <button type="submit" class="btn-secondary w-full sm:w-auto">Logout</button>
+            </form>
+          </div>
+          <div class="chip chip-neutral user-chip">Signed in as {{ g.user.username }}</div>
+        </div>
+      </div>
+
+      <div class="metric-grid mt-6">
+        <div class="metric-card glass-card-muted">
+          <span class="metric-label">Teams</span>
+          <span class="metric-value">{{ teams|length }}</span>
+        </div>
+        <div class="metric-card glass-card-muted">
+          <span class="metric-label">Users</span>
+          <span class="metric-value">{{ users|length }}</span>
+        </div>
+        <div class="metric-card glass-card-muted">
+          <span class="metric-label">Fixtures</span>
+          <span class="metric-value">{{ fixtures|length }}</span>
+        </div>
+        <div class="metric-card glass-card-muted">
+          <span class="metric-label">Admins</span>
+          <span class="metric-value">{{ users|selectattr('is_admin')|list|length }}</span>
+        </div>
+      </div>
+    </section>
+
+    <div class="admin-layout mt-5 sm:mt-6">
+      <div class="admin-stack">
+        <section class="danger-card fade-in stagger-1">
+          <div class="danger-head">
+            <div>
+              <p class="section-title">Danger Zone</p>
+              <h2 class="panel-title mt-2">Reset the league</h2>
+              <p class="text-soft text-sm mt-2">Deletes every fixture and team so you can start a new season cleanly.</p>
+            </div>
+            <span class="chip chip-danger">High impact</span>
+          </div>
+          <form action="/reset_league" method="POST" onsubmit="return confirm('Are you sure you want to reset the entire league?');" class="mt-4">
+            <button type="submit" class="btn-danger w-full sm:w-auto">Reset League</button>
+          </form>
+        </section>
+
+        <section class="glass-card rounded-3xl p-5 sm:p-6 fade-in stagger-2">
+          <div class="panel-head">
+            <div class="panel-copy">
+              <p class="section-title">Clubs</p>
+              <h2 class="panel-title mt-2">Teams</h2>
+              <p class="text-soft text-sm">Review the active league roster and remove clubs when needed.</p>
+            </div>
+            <div class="chip chip-brand">{{ teams|length }} total</div>
+          </div>
+
+          <div class="team-stack">
+            {% for team in teams %}
+            <div class="admin-card">
+              <div class="entity-row">
+                <div class="team-cell">
+                  <span class="team-badge"></span>
+                  <div>
+                    <div class="font-semibold">{{ team.name }}</div>
+                    <div class="text-soft text-sm">Club in active competition</div>
+                  </div>
+                </div>
+                <form action="/delete_team/{{ team.id }}" method="POST" onsubmit="return confirm('Delete {{ team.name }}?');">
+                  <button class="btn-secondary btn-inline-danger">Delete Team</button>
+                </form>
+              </div>
+            </div>
+            {% else %}
+            <div class="empty-state">No teams are set up yet.</div>
+            {% endfor %}
+          </div>
+        </section>
+      </div>
+
+      <div class="admin-stack">
+        <section class="glass-card rounded-3xl p-5 sm:p-6 fade-in stagger-2">
+          <div class="panel-head">
+            <div class="panel-copy">
+              <p class="section-title">Accounts</p>
+              <h2 class="panel-title mt-2">Users</h2>
+              <p class="text-soft text-sm">Create accounts, reset passwords, and manage admin access.</p>
+            </div>
+            <div class="chip chip-accent">{{ users|length }} registered</div>
+          </div>
+
+          <form method="POST" action="/users/create" class="glass-card-muted rounded-2xl p-4 mb-5">
+            <p class="form-kicker">Create a new user</p>
+            <div class="admin-form-grid mt-3">
+              <div class="control-block">
+                <label class="field-label" for="create_username">Username</label>
+                <input id="create_username" name="username" required class="input-theme">
+              </div>
+              <div class="control-block">
+                <label class="field-label" for="create_password">Password</label>
+                <input id="create_password" name="password" type="password" required class="input-theme">
+              </div>
+              <div class="inline-form md:justify-end">
+                <label class="inline-flex items-center gap-2 text-sm font-semibold text-soft mr-2">
+                  <input type="checkbox" name="is_admin">
+                  <span>Admin</span>
+                </label>
+                <button type="submit" class="btn-brand w-full sm:w-auto">Create User</button>
+              </div>
+            </div>
+          </form>
+
+          <div class="user-stack">
+            {% for user in users %}
+            <article class="admin-card">
+              <div class="admin-card-top">
+                <div>
+                  <div class="font-semibold">{{ user.username }}</div>
+                  <div class="fixture-meta mt-2">
+                    <span class="chip {{ 'chip-brand' if user.is_admin else 'chip-neutral' }}">{{ 'Admin' if user.is_admin else 'User' }}</span>
+                    {% if user.id == g.user.id %}
+                    <span class="chip chip-accent">Current session</span>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+
+              <div class="section-grid mt-4">
+                <form method="POST" action="/users/{{ user.id }}/reset_password" class="glass-card-muted rounded-2xl p-4">
+                  <p class="form-kicker">Reset password</p>
+                  <div class="inline-form mt-3">
+                    <input type="password" name="new_password" placeholder="New password" required class="input-theme flex-1">
+                    <button type="submit" class="btn-accent w-full sm:w-auto">Update</button>
+                  </div>
+                </form>
+
+                <div class="glass-card-muted rounded-2xl p-4 space-y-3">
+                  <p class="form-kicker">Permissions</p>
+                  <form method="POST" action="/users/{{ user.id }}/toggle_admin">
+                    <input type="hidden" name="make_admin" value="{{ '0' if user.is_admin else '1' }}">
+                    <button type="submit" class="btn-secondary w-full">
+                      {{ 'Remove Admin Access' if user.is_admin else 'Make Admin' }}
+                    </button>
+                  </form>
+
+                  <form method="POST" action="/users/{{ user.id }}/delete" onsubmit="return confirm('Delete {{ user.username }}?');">
+                    <button type="submit" class="btn-secondary btn-inline-danger w-full">Delete User</button>
+                  </form>
+                </div>
+              </div>
+            </article>
+            {% endfor %}
+          </div>
+        </section>
+
+        <section class="glass-card rounded-3xl p-5 sm:p-6 fade-in stagger-3">
+          <div class="panel-head">
+            <div class="panel-copy">
+              <p class="section-title">Match Operations</p>
+              <h2 class="panel-title mt-2">Fixtures</h2>
+              <p class="text-soft text-sm">Edit time and score from one row so fixture management stays fast.</p>
+            </div>
+            <div class="chip chip-neutral">{{ fixtures|length }} scheduled</div>
+          </div>
+
+          <div class="fixture-list">
+            {% for fixture in fixtures %}
+            <article class="admin-card">
+              <div class="fixture-card-top">
+                <div class="fixture-meta">
+                  <span class="chip {{ 'chip-accent' if fixture.played else 'chip-brand' }}">{{ 'Played' if fixture.played else 'Upcoming' }}</span>
+                  <span class="fixture-meta-item">{{ fixture.fixture_time.strftime('%d %b %Y') }}</span>
+                  <span class="fixture-meta-item">{{ fixture.fixture_time.strftime('%H:%M') }}</span>
+                </div>
+              </div>
+
+              <div class="fixture-matchup">
+                <div class="fixture-team-block text-left sm:text-left">
+                  <span class="fixture-team-name">{{ fixture.home_team.name }}</span>
+                  <span class="fixture-team-sub">Home</span>
+                </div>
+                <div class="result-score">{{ fixture.home_goals if fixture.home_goals is not none else '-' }} - {{ fixture.away_goals if fixture.away_goals is not none else '-' }}</div>
+                <div class="fixture-team-block text-right sm:text-right">
+                  <span class="fixture-team-name">{{ fixture.away_team.name }}</span>
+                  <span class="fixture-team-sub">Away</span>
+                </div>
+              </div>
+
+              <form method="POST" action="/update_fixture/{{ fixture.id }}" class="glass-card-muted rounded-2xl p-4 fixture-action-card">
+                <div class="admin-form-grid mt-3">
+                  <div class="score-inputs">
+                    <div class="score-box">
+                      <label class="field-label score-label" for="home_goals_admin_{{ fixture.id }}" title="{{ fixture.home_team.name }}">{{ fixture.home_team.name }}</label>
+                      <input id="home_goals_admin_{{ fixture.id }}" type="number" name="home_goals" value="{{ fixture.home_goals or '' }}" min="0" class="fixture-score input-theme rounded-md">
+                    </div>
+                    <div class="score-box">
+                      <label class="field-label score-label" for="away_goals_admin_{{ fixture.id }}" title="{{ fixture.away_team.name }}">{{ fixture.away_team.name }}</label>
+                      <input id="away_goals_admin_{{ fixture.id }}" type="number" name="away_goals" value="{{ fixture.away_goals or '' }}" min="0" class="fixture-score input-theme rounded-md">
+                    </div>
+                  </div>
+                  <div class="control-block">
+                    <label class="field-label" for="fixture_time_admin_{{ fixture.id }}">Kickoff</label>
+                    <input id="fixture_time_admin_{{ fixture.id }}" type="datetime-local" name="fixture_time" value="{{ fixture.fixture_time.strftime('%Y-%m-%dT%H:%M') }}" class="fixture-date kickoff-picker input-theme rounded-md">
+                  </div>
+                  <button type="submit" class="btn-brand w-full sm:w-auto">Save</button>
+                </div>
+              </form>
+
+              <div class="fixture-footer mt-4">
+                <form action="/delete_fixture/{{ fixture.id }}" method="POST" onsubmit="return confirm('Delete this fixture?');">
+                  <button class="btn-secondary btn-inline-danger">Delete Fixture</button>
+                </form>
+              </div>
+            </article>
+            {% else %}
+            <div class="empty-state">No fixtures exist yet. Add teams to generate the schedule.</div>
+            {% endfor %}
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
