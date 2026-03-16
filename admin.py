@@ -41,6 +41,17 @@ def update_fixture(fixture_id):
     db.session.commit()
     return redirect(url_for('admin.admin_panel'))
 
+
+@admin_bp.route('/reset_fixture/<int:fixture_id>', methods=['POST'])
+@admin_required
+def reset_fixture(fixture_id):
+    fixture = Fixture.query.get_or_404(fixture_id)
+    fixture.home_goals = None
+    fixture.away_goals = None
+    fixture.played = False
+    db.session.commit()
+    return redirect(url_for('admin.admin_panel'))
+
 @admin_bp.route('/reset_league', methods=['POST'])
 @admin_required
 def reset_league():

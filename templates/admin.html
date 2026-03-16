@@ -227,6 +227,11 @@
               </form>
 
               <div class="fixture-footer mt-4">
+                {% if fixture.played or fixture.home_goals is not none or fixture.away_goals is not none %}
+                <form action="/reset_fixture/{{ fixture.id }}" method="POST" onsubmit="return confirm('Reset this fixture result?');">
+                  <button class="btn-secondary w-full sm:w-auto">Reset Fixture</button>
+                </form>
+                {% endif %}
                 <form action="/delete_fixture/{{ fixture.id }}" method="POST" onsubmit="return confirm('Delete this fixture?');">
                   <button class="btn-secondary btn-inline-danger">Delete Fixture</button>
                 </form>
