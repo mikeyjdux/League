@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LeagueOn</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  {% include '_theme_head.html' %}
+</head>
+<body class="app-theme antialiased">
+  <div class="page-shell">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="space-y-3 mb-5">
+      {% for category, message in messages %}
+      <div class="alert-banner {{ 'alert-success' if category == 'success' else 'alert-error' }}">{{ message }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <section class="glass-card rounded-3xl p-5 sm:p-7 fade-in">
+      <div class="dashboard-grid-wide">
+        <div>
+          <p class="section-title">LeagueOn</p>
+          <h1 class="display-title mt-2">Admin Overview</h1>
+        </div>
+        <div class="flex flex-col sm:items-end gap-3 mt-4 sm:mt-0">
+          <div class="header-actions w-full sm:w-auto sm:justify-end">
+            {% if current_league %}
+            <a href="{{ url_for('league_dashboard', league_slug=current_league.slug) }}" class="btn-brand w-full sm:w-auto text-center">Back to League</a>
+            {% else %}
+            <a href="{{ url_for('index') }}" class="btn-brand w-full sm:w-auto text-center">Open Dashboard</a>
+            {% endif %}
+            <form action="/logout" method="POST" class="w-full sm:w-auto">
+              <button type="submit" class="btn-secondary w-full sm:w-auto">Logout</button>
+            </form>
+          </div>
+          <div class="header-meta-stack">
+            <div class="chip chip-accent user-chip">{{ leagues|length }} leagues</div>
+            <div class="chip chip-neutral user-chip">Signed in as {{ g.user.username }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="metric-grid mt-6">
+        <div class="metric-card glass-card-muted">
+          <span class="metric-label">Leagues</span>
+          <span class="metric-value">{{ leagues|length }}</span>
+        </div>
+        <div class="metric-card glass-card-muted">
+          <span class="metric-label">Users</span>
+          <span class="metric-value">{{ users|length }}</span>
+        </div>
+        <div class="metric-card glass-card-muted">
+          <span class="metric-label">App Admins</span>
+          <span class="metric-value">{{ users|selectattr('is_admin')|list|length }}</span>
+        </div>
+        <div class="metric-card glass-card-muted">
+          <span class="metric-label">Memberships</span>
+          <span class="metric-value">{{ users|sum(attribute='membership_count') }}</span>
+        </div>
+      </div>
+    </section>
+
+    <div class="admin-layout mt-5 sm:mt-6">
+      <div class="admin-stack">
+        <section class="glass-card rounded-3xl p-5 sm:p-6 fade-in stagger-1">
+          <div class="panel-head">
+            <div class="panel-copy">
+              <p class="section-title">Expansion</p>
+              <h2 class="panel-title mt-2">Create a new league</h2>
+            </div>
+            <div class="chip chip-brand">Multi-league</div>
+          </div>
+
+          <form method="POST" action="{{ url_for('admin.create_league') }}" class="glass-card-muted rounded-2xl p-4">
+            <div class="space-y-4 mt-3">
+              <div class="control-block">
+                <label class="field-label" for="create_league_name">League name</label>
+                <input id="create_league_name" name="league_name" required class="input-theme" placeholder="Sunday League">
+              </div>
+              <div class="control-block">
+                <label class="field-label" for="create_season_name">Initial season</label>
+                <input id="create_season_name" name="season_name" class="input-theme" placeholder="2026 Spring">
+              </div>
+              <div class="control-block">
+                <label class="field-label" for="create_league_slug">Slug (optional)</label>
+                <input id="create_league_slug" name="league_slug" class="input-theme" placeholder="sunday-league">
+              </div>
+              <button type="submit" class="btn-brand w-full sm:w-auto">Create League</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="glass-card rounded-3xl p-5 sm:p-6 fade-in stagger-2">
+          <div class="panel-head">
+            <div class="panel-copy">
+              <p class="section-title">Leagues</p>
+              <h2 class="panel-title mt-2">All competitions</h2>
+            </div>
+            <div class="chip chip-brand">{{ leagues|length }} total</div>
+          </div>
+
+          <div class="team-stack">
+            {% for league in leagues %}
+            <article class="admin-card">
+              <div class="admin-card-top">
+                <div>
+                  <div class="font-semibold">{{ league.name }}</div>
+                  <div class="fixture-meta mt-2">
+                    <span class="chip chip-brand">{{ league.slug }}</span>
+                    <span class="fixture-meta-item">Code: {{ league.join_code }}</span>
+                    <span class="fixture-meta-item">{{ league.active_season.name if league.active_season else 'No active season' }}</span>
+                  </div>
+                </div>
+                <div class="header-actions">
+                  <a href="{{ url_for('admin.league_manager', league_slug=league.slug) }}" class="btn-accent w-full sm:w-auto text-center">Manage League</a>
+                  {% if league.user_has_access %}
+                  <a href="{{ url_for('league_dashboard', league_slug=league.slug) }}" class="btn-secondary w-full sm:w-auto text-center">Open Dashboard</a>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="metric-grid mt-4">
+                <div class="metric-card glass-card-muted">
+                  <span class="metric-label">Members</span>
+                  <span class="metric-value">{{ league.member_count }}</span>
+                </div>
+                <div class="metric-card glass-card-muted">
+                  <span class="metric-label">Moderators</span>
+                  <span class="metric-value">{{ league.moderator_count }}</span>
+                </div>
+                <div class="metric-card glass-card-muted">
+                  <span class="metric-label">Teams</span>
+                  <span class="metric-value">{{ league.team_count }}</span>
+                </div>
+                <div class="metric-card glass-card-muted">
+                  <span class="metric-label">Fixtures</span>
+                  <span class="metric-value">{{ league.fixture_count }}</span>
+                </div>
+              </div>
+            </article>
+            {% else %}
+            <div class="empty-state">No leagues exist yet.</div>
+            {% endfor %}
+          </div>
+        </section>
+      </div>
+
+      <div class="admin-stack">
+        <section class="glass-card rounded-3xl p-5 sm:p-6 fade-in stagger-3">
+          <div class="panel-head">
+            <div class="panel-copy">
+              <p class="section-title">Users</p>
+              <h2 class="panel-title mt-2">All accounts</h2>
+            </div>
+            <div class="chip chip-accent">{{ users|length }} total</div>
+          </div>
+
+          <div class="user-stack">
+            {% for user in users %}
+            <article class="admin-card">
+              <div class="admin-card-top">
+                <div>
+                  <div class="font-semibold">{{ user.username }}</div>
+                  <div class="fixture-meta mt-2">
+                    <span class="chip {{ 'chip-brand' if user.is_admin else 'chip-neutral' }}">{{ 'Admin' if user.is_admin else 'User' }}</span>
+                    <span class="fixture-meta-item">{{ user.membership_count }} league{{ '' if user.membership_count == 1 else 's' }}</span>
+                    {% if user.id == g.user.id %}
+                    <span class="chip chip-accent">Current session</span>
+                    {% endif %}
+                  </div>
+                </div>
+                <form method="POST" action="{{ url_for('admin.delete_user_from_admin', user_id=user.id) }}" onsubmit="return confirm('Delete {{ user.username }} from the app and remove all league memberships?');">
+                  <button type="submit" class="btn-secondary btn-inline-danger w-full sm:w-auto" {% if user.id == g.user.id or (user.is_admin and users|selectattr('is_admin')|list|length <= 1) %}disabled{% endif %}>Delete User</button>
+                </form>
+              </div>
+              <form method="POST" action="{{ url_for('admin.reset_user_password_from_admin', user_id=user.id) }}" class="glass-card-muted rounded-2xl p-4 mt-4">
+                <p class="form-kicker">Reset password</p>
+                <div class="inline-form mt-3">
+                  <input type="password" name="new_password" placeholder="New password" required class="input-theme flex-1">
+                  <button type="submit" class="btn-accent w-full sm:w-auto">Update</button>
+                </div>
+              </form>
+              <div class="team-stack mt-4">
+                {% for membership in user.sorted_memberships %}
+                <div class="entity-row rounded-2xl bg-white bg-opacity-70 px-4 py-3 border border-line">
+                  <div>
+                    <div class="font-semibold">{{ membership.league.name }}</div>
+                  </div>
+                  <div class="header-actions">
+                    <span class="chip {{ 'chip-brand' if membership.role == 'moderator' else 'chip-neutral' }}">{{ 'Moderator' if membership.role == 'moderator' else 'User' }}</span>
+                    <form method="POST" action="{{ url_for('admin.toggle_membership_moderator_from_admin', membership_id=membership.id) }}">
+                      <input type="hidden" name="make_moderator" value="{{ '0' if membership.role == 'moderator' else '1' }}">
+                      <button type="submit" class="btn-secondary w-full sm:w-auto">{{ 'Remove Moderator' if membership.role == 'moderator' else 'Make Moderator' }}</button>
+                    </form>
+                    <form method="POST" action="{{ url_for('admin.delete_membership_from_admin', membership_id=membership.id) }}" onsubmit="return confirm('Remove {{ user.username }} from {{ membership.league.name }}?');">
+                      <button type="submit" class="btn-secondary btn-inline-danger w-full sm:w-auto" {% if user.id == g.user.id %}disabled{% endif %}>Remove From League</button>
+                    </form>
+                  </div>
+                </div>
+                {% else %}
+                <div class="empty-state">This user is not assigned to any leagues.</div>
+                {% endfor %}
+              </div>
+            </article>
+            {% endfor %}
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

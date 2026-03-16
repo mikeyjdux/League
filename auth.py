@@ -1,8 +1,9 @@
 import os
 from functools import wraps
 
-from flask import Blueprint, g, redirect, render_template, request, session, url_for
+from flask import Blueprint, flash, g, redirect, render_template, request, session, url_for
 
+from league import add_user_to_league, get_league_by_join_code, normalize_join_code
 from models import User, db
 
 
@@ -40,9 +41,15 @@ def admin_required(view):
     return wrapped_view
 
 
+def log_in_user(user):
+    session.clear()
+    session['user_id'] = user.id
+
+
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
     error = None
+    invite_join_code = normalize_join_code(request.args.get('join_code', ''))
     if g.user is not None:
         return redirect(url_for('index'))
 
@@ -54,11 +61,50 @@ def login():
         if not user or not user.check_password(password):
             error = 'Invalid username or password.'
         else:
-            session.clear()
-            session['user_id'] = user.id
+            log_in_user(user)
             return redirect(url_for('index'))
 
-    return render_template('login.html', error=error)
+    return render_template('login.html', error=error, invite_join_code=invite_join_code)
+
+
+@auth_bp.route('/register', methods=['POST'])
+def register():
+    if g.user is not None:
+        return redirect(url_for('index'))
+
+    username = request.form.get('username', '').strip()
+    password = request.form.get('password', '')
+    join_code = normalize_join_code(request.form.get('join_code', ''))
+
+    def redirect_to_login_with_code():
+        if join_code:
+            return redirect(url_for('auth.login', join_code=join_code))
+        return redirect(url_for('auth.login'))
+
+    if not username or not password or not join_code:
+        flash('Username, password, and a valid league code are required.', 'error')
+        return redirect_to_login_with_code()
+
+    if User.query.filter_by(username=username).first() is not None:
+        flash('That username is already taken.', 'error')
+        return redirect_to_login_with_code()
+
+    league = get_league_by_join_code(join_code)
+    if league is None:
+        flash('That league code is invalid.', 'error')
+        return redirect_to_login_with_code()
+
+    user = User()
+    user.username = username
+    user.set_password(password)
+    db.session.add(user)
+    db.session.flush()
+    add_user_to_league(user, league)
+    db.session.commit()
+
+    log_in_user(user)
+    flash(f'Account created. You joined {league.name}.', 'success')
+    return redirect(url_for('league_dashboard', league_slug=league.slug))
 
 
 @auth_bp.route('/logout', methods=['POST'])
@@ -84,7 +130,9 @@ def ensure_admin_user():
 
     user = User.query.filter_by(username=username).first()
     if user is None:
-        user = User(username=username, is_admin=True)
+        user = User()
+        user.username = username
+        user.is_admin = True
         user.set_password(password)
         db.session.add(user)
     else:

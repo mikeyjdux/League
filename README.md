@@ -46,6 +46,12 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+Create a local env file:
+
+```bash
+cp .env.example .env
+```
+
 ## Environment Variables
 
 ### Required locally
@@ -70,8 +76,10 @@ Notes:
 Start the dev server:
 
 ```bash
-DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST:PORT/DBNAME python app.py
+python app.py
 ```
+
+The app automatically loads variables from `.env` in the project root.
 
 Open:
 

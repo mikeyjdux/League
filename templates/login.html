@@ -3,37 +3,83 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Login</title>
+  <title>LeagueOn</title>
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   {% include '_theme_head.html' %}
 </head>
 <body class="app-theme antialiased">
   <div class="page-shell min-h-screen flex items-center justify-center">
-    <div class="glass-card rounded-3xl w-full max-w-md p-6 sm:p-8 fade-in">
+    <div class="glass-card rounded-3xl w-full max-w-4xl p-6 sm:p-8 fade-in">
       <div class="text-center">
-        <p class="section-title">League Access</p>
-        <h1 class="display-title mt-3">League Tracker</h1>
-        <p class="text-soft text-sm mt-3">Sign in to continue.</p>
+        <p class="section-title">LeagueOn</p>
+        <h1 class="display-title mt-3">LeagueOn</h1>
       </div>
 
       {% if error %}
-      <div class="mt-6 p-3 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-sm">
+      <div class="mt-6 alert-banner alert-error">
         {{ error }}
       </div>
       {% endif %}
 
-      <form method="POST" class="space-y-4 mt-6">
-        <div>
-          <label class="field-label" for="username">Username</label>
-          <input id="username" name="username" required class="w-full mt-2 input-theme rounded-md">
-        </div>
-        <div>
-          <label class="field-label" for="password">Password</label>
-          <input id="password" name="password" type="password" required class="w-full mt-2 input-theme rounded-md">
-        </div>
-        <button type="submit" class="btn-brand w-full">Sign In</button>
-      </form>
+      {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+      <div class="mt-6 space-y-3">
+        {% for category, message in messages %}
+        <div class="alert-banner {{ 'alert-success' if category == 'success' else 'alert-error' }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% endwith %}
+
+      <div class="section-grid mt-6">
+        <form method="POST" class="glass-card-muted rounded-2xl p-5 space-y-4">
+          <div>
+            <p class="form-kicker">Sign in</p>
+          </div>
+          <div>
+            <label class="field-label" for="username">Username</label>
+            <input id="username" name="username" required class="w-full mt-2 input-theme rounded-md">
+          </div>
+          <div>
+            <label class="field-label" for="password">Password</label>
+            <input id="password" name="password" type="password" required class="w-full mt-2 input-theme rounded-md">
+          </div>
+          <button type="submit" class="btn-brand w-full">Sign In</button>
+        </form>
+
+        <form method="POST" action="{{ url_for('auth.register') }}" class="glass-card-muted rounded-2xl p-5 space-y-4">
+          <div>
+            <p class="form-kicker">Create account</p>
+          </div>
+          <div>
+            <label class="field-label" for="register_username">Username</label>
+            <input id="register_username" name="username" required class="w-full mt-2 input-theme rounded-md">
+          </div>
+          <div>
+            <label class="field-label" for="register_password">Password</label>
+            <input id="register_password" name="password" type="password" required class="w-full mt-2 input-theme rounded-md">
+          </div>
+          <div>
+            <label class="field-label" for="register_join_code">League join code</label>
+            <input id="register_join_code" name="join_code" value="{{ invite_join_code or '' }}" required class="w-full mt-2 input-theme rounded-md" placeholder="AB7K9">
+          </div>
+          <button type="submit" class="btn-accent w-full">Create Account</button>
+        </form>
+      </div>
     </div>
   </div>
+
+  <script>
+    const registerJoinCodeInput = document.getElementById('register_join_code');
+    if (registerJoinCodeInput) {
+      const formatJoinCode = (value) => value.toUpperCase().replace(/\s+/g, '');
+      registerJoinCodeInput.addEventListener('input', () => {
+        registerJoinCodeInput.value = formatJoinCode(registerJoinCodeInput.value);
+      });
+      registerJoinCodeInput.addEventListener('blur', () => {
+        registerJoinCodeInput.value = formatJoinCode(registerJoinCodeInput.value);
+      });
+    }
+  </script>
 </body>
 </html>

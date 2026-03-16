@@ -2,33 +2,85 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>League Tracker</title>
+  <title>LeagueOn</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   {% include '_theme_head.html' %}
 </head>
 <body class="app-theme antialiased">
   <div class="page-shell">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="space-y-3 mb-5">
+      {% for category, message in messages %}
+      <div class="alert-banner {{ 'alert-success' if category == 'success' else 'alert-error' }}">{{ message }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
     <section class="hero-shell glass-card rounded-3xl p-5 sm:p-7 fade-in">
       <div class="dashboard-grid-wide">
         <div>
-          <p class="section-title">Matchday Dashboard</p>
-          <h1 class="hero-title mt-2">League Tracker</h1>
-          <p class="text-soft mt-3 max-w-2xl text-sm sm:text-base">
-            Keep standings, fixtures, and season admin in one place without the usual spreadsheet sprawl.
-          </p>
+          <p class="section-title">LeagueOn</p>
+          <h1 class="hero-title mt-2">LeagueOn</h1>
+          {% if available_leagues and available_leagues|length > 1 and current_league %}
+          <div class="league-switcher mt-4" id="leagueSwitcher">
+            <span class="field-label">League</span>
+            <button type="button" id="leagueSwitcherTrigger" class="league-switcher-trigger mt-2" aria-haspopup="true" aria-expanded="false">
+              <span class="league-switcher-copy">
+                <span class="league-switcher-current">{{ current_league.name }}</span>
+                <span class="league-switcher-meta">{{ available_leagues|length }} leagues</span>
+              </span>
+              <span class="league-switcher-caret">v</span>
+            </button>
+            <div id="leagueSwitcherMenu" class="league-switcher-menu hidden">
+              {% for league in available_leagues %}
+              <a href="{{ url_for('league_dashboard', league_slug=league.slug) }}" class="league-switcher-option {% if league.id == current_league.id %}league-switcher-option-active{% endif %}">
+                <span class="league-switcher-option-name">{{ league.name }}</span>
+                {% if league.id == current_league.id %}
+                <span class="chip chip-brand">Current</span>
+                {% endif %}
+              </a>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+          {% if current_league %}
+          <div class="fixture-meta mt-4">
+            <span class="chip chip-brand">League</span>
+            <span class="fixture-meta-item">{{ current_league.name }}</span>
+            <button
+              type="button"
+              id="shareLeagueCodeButton"
+              class="fixture-meta-item"
+              data-invite-link="{{ request.url_root.rstrip('/') }}{{ url_for('auth.login') }}?join_code={{ current_league.join_code }}"
+            >
+              Code: {{ current_league.join_code }}
+            </button>
+            <span id="shareLeagueCodeStatus" class="fixture-meta-item hidden">Invite link copied</span>
+          </div>
+          {% endif %}
         </div>
         <div class="flex flex-col sm:items-end gap-3 mt-4 sm:mt-0">
           <div class="header-actions w-full sm:w-auto sm:justify-end">
+            <button type="button" onclick="toggleJoinLeagueModal()" class="btn-secondary w-full sm:w-auto">Join League</button>
             {% if g.user.is_admin %}
-            <a href="/admin-panel" class="btn-accent w-full sm:w-auto text-center">Open Admin</a>
+            <a href="{{ url_for('admin.admin_overview') }}" class="btn-accent w-full sm:w-auto text-center">Open Admin</a>
+            {% endif %}
+            {% if (current_membership and current_membership.role == 'moderator') or g.user.is_admin %}
             <button onclick="toggleTeamPanel()" class="btn-brand w-full sm:w-auto">Manage Teams</button>
             {% endif %}
             <form action="/logout" method="POST" class="w-full sm:w-auto">
               <button type="submit" class="btn-secondary w-full sm:w-auto">Logout</button>
             </form>
           </div>
-          <div class="chip chip-neutral user-chip">Signed in as {{ g.user.username }}</div>
+          <div class="header-meta-stack">
+            {% if current_season %}
+            <div class="chip chip-brand user-chip">Season: {{ current_season.name }}</div>
+            {% endif %}
+            <div class="chip chip-neutral user-chip">Signed in as {{ g.user.username }}</div>
+          </div>
         </div>
       </div>
 
@@ -47,18 +99,51 @@
         </div>
         <div class="metric-card glass-card-muted">
           <span class="metric-label">Mode</span>
-          <span class="metric-value text-lg sm:text-xl">{{ 'Admin' if g.user.is_admin else 'Viewer' }}</span>
+          <span class="metric-value text-lg sm:text-xl">{{ 'Admin' if g.user.is_admin else 'Moderator' if current_membership and current_membership.role == 'moderator' else 'Viewer' }}</span>
         </div>
       </div>
     </section>
 
+    {% if not current_league %}
+    <section class="glass-card rounded-3xl p-5 sm:p-6 fade-in mt-5 sm:mt-6">
+        <div class="panel-head">
+          <div class="panel-copy">
+            <p class="section-title">No League</p>
+            <h2 class="panel-title mt-2">You are not assigned to a league yet</h2>
+          </div>
+        <div class="chip chip-neutral">Waiting for access</div>
+      </div>
+      <div class="section-grid mt-4">
+        <div class="empty-state">There is nothing to show here until your account is linked to at least one league.</div>
+        {% if g.user.is_admin %}
+        <form method="POST" action="{{ url_for('admin.create_league') }}" class="glass-card-muted rounded-2xl p-4">
+          <p class="form-kicker">Create your first league</p>
+          <div class="space-y-4 mt-3">
+            <div class="control-block">
+              <label class="field-label" for="empty_league_name">League name</label>
+              <input id="empty_league_name" name="league_name" required class="input-theme" placeholder="Sunday League">
+            </div>
+            <div class="control-block">
+              <label class="field-label" for="empty_season_name">Initial season</label>
+              <input id="empty_season_name" name="season_name" class="input-theme" placeholder="2026 Spring">
+            </div>
+            <div class="control-block">
+              <label class="field-label" for="empty_league_slug">Slug (optional)</label>
+              <input id="empty_league_slug" name="league_slug" class="input-theme" placeholder="sunday-league">
+            </div>
+            <button type="submit" class="btn-brand w-full sm:w-auto">Create League</button>
+          </div>
+        </form>
+        {% endif %}
+      </div>
+    </section>
+    {% else %}
     <div class="dashboard-grid mt-5 sm:mt-6">
       <section class="glass-card rounded-3xl p-5 sm:p-6 fade-in stagger-1">
         <div class="panel-head">
           <div class="panel-copy">
             <p class="section-title">Standings</p>
             <h2 class="panel-title mt-2">League table</h2>
-            <p class="text-soft text-sm">Quick scan for rank, form, and the points race.</p>
           </div>
           {% if table %}
           <div class="chip chip-brand">Leader: {{ table[0].team }}</div>
@@ -108,7 +193,6 @@
           <div class="panel-copy">
             <p class="section-title">Schedule</p>
             <h2 class="panel-title mt-2">Fixtures and results</h2>
-            <p class="text-soft text-sm">Use the live panel for upcoming matches and recent scorelines.</p>
           </div>
           <div class="tab-row">
             <button type="button" id="tab-fixtures" class="tab-button tab-active" onclick="showTab('fixtures')">Fixtures</button>
@@ -140,9 +224,9 @@
                 </div>
               </div>
 
+              {% if (current_membership and current_membership.role == 'moderator') or g.user.is_admin %}
               <div class="section-grid fixture-actions-grid">
-                <form method="POST" class="glass-card-muted rounded-2xl p-4 fixture-action-card">
-                  <input type="hidden" name="fixture_id" value="{{ match.id }}">
+                <form action="{{ url_for('submit_fixture_result', league_slug=current_league.slug, fixture_id=match.id) }}" method="POST" class="glass-card-muted rounded-2xl p-4 fixture-action-card">
                   <div class="score-inputs mt-3">
                     <div class="score-box">
                       <label class="field-label score-label" for="home_goals_{{ match.id }}" title="{{ match.home_team.name }}">{{ match.home_team.name }}</label>
@@ -156,8 +240,7 @@
                   <button type="submit" class="btn-accent w-full mt-4">Save Result</button>
                 </form>
 
-                <form action="/update_fixture_datetime" method="POST" class="glass-card-muted rounded-2xl p-4 fixture-action-card fixture-reschedule-card">
-                  <input type="hidden" name="fixture_id" value="{{ match.id }}">
+                <form action="{{ url_for('reschedule_fixture', league_slug=current_league.slug, fixture_id=match.id) }}" method="POST" class="glass-card-muted rounded-2xl p-4 fixture-action-card fixture-reschedule-card">
                   <div class="reschedule-controls mt-3">
                     <div class="control-block">
                       <label class="field-label" for="fixture_date_{{ match.id }}">Kickoff time</label>
@@ -167,6 +250,7 @@
                   </div>
                 </form>
               </div>
+              {% endif %}
             </article>
             {% endfor %}
           {% else %}
@@ -204,15 +288,34 @@
         </div>
       </section>
     </div>
+    {% endif %}
   </div>
 
-  {% if g.user.is_admin %}
+  <div id="joinLeagueOverlay" class="drawer-overlay hidden" onclick="toggleJoinLeagueModal()"></div>
+  <section id="joinLeagueModal" class="modal-panel hidden" aria-hidden="true">
+    <div class="drawer-head">
+      <div>
+        <p class="section-title">Join League</p>
+        <h3 class="panel-title mt-2">Add another league</h3>
+      </div>
+      <button type="button" onclick="toggleJoinLeagueModal()" class="drawer-close" aria-label="Close join league panel">x</button>
+    </div>
+
+    <form action="{{ url_for('join_league') }}" method="POST" class="glass-card rounded-2xl p-4 space-y-4">
+      <div>
+        <label class="field-label" for="join_code">League code</label>
+        <input id="join_code" type="text" name="join_code" placeholder="AB7K9" required class="w-full mt-2 input-theme rounded-md">
+      </div>
+      <button type="submit" class="btn-brand w-full">Join League</button>
+    </form>
+  </section>
+
+  {% if (current_membership and current_membership.role == 'moderator') or g.user.is_admin %}
   <aside id="teamPanel" class="drawer-panel">
     <div class="drawer-head">
       <div>
         <p class="section-title">Club Setup</p>
         <h3 class="panel-title mt-2">Manage teams</h3>
-        <p class="text-soft text-sm mt-2">Add clubs quickly and keep a live overview of the league roster.</p>
       </div>
       <button onclick="toggleTeamPanel()" class="drawer-close" aria-label="Close manage teams panel">x</button>
     </div>
@@ -234,7 +337,7 @@
       </div>
     </div>
 
-    <form action="/add_team" method="POST" class="glass-card rounded-2xl p-4 space-y-4">
+    <form action="{{ url_for('add_team', league_slug=current_league.slug) }}" method="POST" class="glass-card rounded-2xl p-4 space-y-4">
       <div>
         <label class="field-label" for="team_name">New team</label>
         <input id="team_name" type="text" name="team_name" placeholder="Enter team name" required class="w-full mt-2 input-theme rounded-md">
@@ -271,12 +374,97 @@
     }
 
     function toggleTeamPanel() {
-      {% if g.user.is_admin %}
+      {% if (current_membership and current_membership.role == 'moderator') or g.user.is_admin %}
       const panel = document.getElementById('teamPanel');
       const overlay = document.getElementById('overlay');
       panel.classList.toggle('open');
       overlay.classList.toggle('hidden');
       {% endif %}
+    }
+
+    function toggleJoinLeagueModal() {
+      const panel = document.getElementById('joinLeagueModal');
+      const overlay = document.getElementById('joinLeagueOverlay');
+      panel.classList.toggle('hidden');
+      overlay.classList.toggle('hidden');
+    }
+
+    const joinCodeInput = document.getElementById('join_code');
+    if (joinCodeInput) {
+      const formatJoinCode = (value) => value.toUpperCase().replace(/\s+/g, '');
+      joinCodeInput.addEventListener('input', () => {
+        joinCodeInput.value = formatJoinCode(joinCodeInput.value);
+      });
+      joinCodeInput.addEventListener('blur', () => {
+        joinCodeInput.value = formatJoinCode(joinCodeInput.value);
+      });
+    }
+
+    const leagueSwitcher = document.getElementById('leagueSwitcher');
+    const leagueSwitcherTrigger = document.getElementById('leagueSwitcherTrigger');
+    const leagueSwitcherMenu = document.getElementById('leagueSwitcherMenu');
+    if (leagueSwitcher && leagueSwitcherTrigger && leagueSwitcherMenu) {
+      const setLeagueSwitcherOpen = (isOpen) => {
+        leagueSwitcherMenu.classList.toggle('hidden', !isOpen);
+        leagueSwitcherTrigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      };
+
+      leagueSwitcherTrigger.addEventListener('click', () => {
+        const isOpen = leagueSwitcherMenu.classList.contains('hidden');
+        setLeagueSwitcherOpen(isOpen);
+      });
+
+      document.addEventListener('click', (event) => {
+        if (!leagueSwitcher.contains(event.target)) {
+          setLeagueSwitcherOpen(false);
+        }
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          setLeagueSwitcherOpen(false);
+        }
+      });
+    }
+
+    const shareLeagueCodeButton = document.getElementById('shareLeagueCodeButton');
+    const shareLeagueCodeStatus = document.getElementById('shareLeagueCodeStatus');
+    if (shareLeagueCodeButton && shareLeagueCodeStatus) {
+      let shareStatusTimeout;
+      const fallbackCopyText = (value) => {
+        const helper = document.createElement('textarea');
+        helper.value = value;
+        helper.setAttribute('readonly', '');
+        helper.style.position = 'absolute';
+        helper.style.left = '-9999px';
+        document.body.appendChild(helper);
+        helper.select();
+        helper.setSelectionRange(0, helper.value.length);
+        const copied = document.execCommand('copy');
+        document.body.removeChild(helper);
+        return copied;
+      };
+
+      shareLeagueCodeButton.addEventListener('click', async () => {
+        const inviteLink = shareLeagueCodeButton.dataset.inviteLink;
+        try {
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(inviteLink);
+          } else if (!fallbackCopyText(inviteLink)) {
+            throw new Error('Fallback copy failed');
+          }
+          shareLeagueCodeStatus.textContent = 'Invite link copied';
+        } catch (error) {
+          shareLeagueCodeStatus.textContent = 'Copy the link manually';
+          window.prompt('Copy invite link', inviteLink);
+        }
+
+        shareLeagueCodeStatus.classList.remove('hidden');
+        window.clearTimeout(shareStatusTimeout);
+        shareStatusTimeout = window.setTimeout(() => {
+          shareLeagueCodeStatus.classList.add('hidden');
+        }, 2000);
+      });
     }
   </script>
 </body>
