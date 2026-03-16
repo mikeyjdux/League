@@ -1,7 +1,6 @@
 import os
 from datetime import datetime
 
-from dotenv import load_dotenv
 from flask import Flask, flash, g, redirect, render_template, request, session, url_for
 
 from admin import admin_bp
@@ -17,9 +16,6 @@ from league import (
     add_user_to_league,
 )
 from models import Fixture, Team, db
-
-
-load_dotenv()
 
 
 def env_flag(name):

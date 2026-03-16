@@ -1,13 +1,16 @@
-# League Simple
+# LeagueOn
 
-Small Flask app for running a football league table with fixtures, results, users, and admin controls.
+Small Flask app for running football leagues with standings, fixtures, league membership, and role-based admin controls.
 
 ## Features
 
-- Server-rendered league table with live standings
-- Upcoming fixtures and recorded results
-- Login-protected app with admin and non-admin users
-- Admin tools for teams, fixtures, users, and league reset
+- Multi-league support with per-league membership
+- Active season per league
+- Permanent 5-character league join codes
+- Self-registration with a valid league code
+- Global admin tools for leagues, users, and moderator assignment
+- League moderator tools for teams and fixtures
+- Server-rendered league table with upcoming fixtures and recorded results
 - Render-ready deployment via `render.yaml`
 
 ## Stack
@@ -21,10 +24,11 @@ Small Flask app for running a football league table with fixtures, results, user
 
 ## Project Structure
 
-- `app.py` - app setup, config, home page, standings, fixture score updates
-- `auth.py` - login/logout and admin bootstrap user creation
-- `admin.py` - admin panel routes for users, teams, fixtures, and reset
-- `models.py` - SQLAlchemy models
+- `app.py` - app setup, config, dashboard routes, league joining, standings, fixture score updates
+- `auth.py` - login/logout, registration, and bootstrap admin user creation
+- `admin.py` - global admin routes and league management routes
+- `league.py` - league helpers, join-code helpers, memberships, and context loading
+- `models.py` - SQLAlchemy models for leagues, seasons, memberships, fixtures, and users
 - `templates/` - UI templates and shared styles
 - `render.yaml` - Render service and database config
 - `runtime.txt` - pinned Python version for Render
@@ -46,12 +50,6 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Create a local env file:
-
-```bash
-cp .env.example .env
-```
-
 ## Environment Variables
 
 ### Required locally
@@ -70,16 +68,16 @@ Notes:
 - The app normalizes `postgres://` and `postgresql://` URLs to `postgresql+psycopg://` automatically.
 - On startup, the app runs `db.create_all()` and ensures that at least one admin user exists.
 - In non-production development only, the app can fall back to a default secret key and default admin credentials.
+- For local development, export variables in your shell before starting the app.
 
 ## Running Locally
 
 Start the dev server:
 
 ```bash
+export DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST:PORT/DBNAME
 python app.py
 ```
-
-The app automatically loads variables from `.env` in the project root.
 
 Open:
 
@@ -159,8 +157,11 @@ This repo includes a `render.yaml` that defines:
 ## Auth and Permissions
 
 - All app pages require login.
-- Non-admin users can view standings, enter fixture scores, and reschedule unplayed fixtures.
-- Admin users can additionally manage teams, fixtures, users, and reset the league.
+- New users register with a valid league join code.
+- Existing users can join additional leagues with a join code.
+- Regular users can access only leagues they belong to.
+- Moderators can manage teams and fixtures within their league.
+- Global admins can manage all leagues, users, and moderator assignments.
 
 ## UI Notes
 
