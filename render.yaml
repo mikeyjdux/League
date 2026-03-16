@@ -14,10 +14,10 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: LEAGUE_ADMIN_USERNAME
-        sync: false
+        # sync: false
         value: Admin
       - key: LEAGUE_ADMIN_PASSWORD
-        sync: false
+        # sync: false
         value: admin123
       - key: FLASK_ENV
         value: production
