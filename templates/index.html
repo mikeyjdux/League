@@ -54,7 +54,7 @@
               type="button"
               id="shareLeagueCodeButton"
               class="fixture-meta-item"
-              data-invite-link="{{ request.url_root.rstrip('/') }}{{ url_for('auth.login') }}?join_code={{ current_league.join_code }}"
+              data-invite-link="{{ request.url_root.rstrip('/') }}{{ url_for('join_league_from_link', join_code=current_league.join_code) }}"
             >
               Code: {{ current_league.join_code }}
             </button>

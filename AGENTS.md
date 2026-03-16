@@ -1,173 +1,194 @@
 # AGENTS.md
 
-This file guides coding agents working in `/home/mduxbury/Footy/league_simple`.
+Guidance for coding agents working in `/home/mduxbury/Footy/league_simple`.
 
-## Project Overview
+## Project Snapshot
 
-- Small Flask app for managing a football league table, fixtures, users, and admin actions.
-- Server-rendered UI using Jinja templates in `templates/`.
-- Data layer uses Flask-SQLAlchemy with PostgreSQL.
-- Deployment target is Render via `render.yaml`.
+- Flask app for managing football leagues, seasons, teams, fixtures, users, and roles.
+- Server-rendered UI with Jinja templates in `templates/`.
+- PostgreSQL-backed data model via Flask-SQLAlchemy.
+- Render deployment configuration lives in `render.yaml`.
+- Current branding is `LeagueOn`.
 
-## Repository Layout
+## Key Files
 
-- `app.py` - app bootstrap, config, main routes, standings computation.
-- `auth.py` - login/logout, auth decorators, bootstrap admin user.
-- `admin.py` - admin-only management routes.
+- `app.py` - app bootstrap, env/config checks, dashboard routes, invite-join flow.
+- `auth.py` - login, logout, registration, decorators, bootstrap admin creation.
+- `admin.py` - global admin routes and league manager routes.
+- `league.py` - join code helpers, league context loading, schema patch helpers.
 - `models.py` - SQLAlchemy models.
-- `templates/` - Jinja HTML templates and shared theme CSS.
-- `requirements.txt` - runtime dependencies.
-- `render.yaml` - Render service/database config.
-- `runtime.txt` - pinned Python runtime for Render.
-- `README.md` - human-facing setup and deployment guide.
+- `templates/index.html` - main dashboard.
+- `templates/admin.html` - league manager UI.
+- `templates/admin_overview.html` - global admin UI.
+- `templates/login.html` - login and registration UI.
+- `templates/_theme_head.html` - shared theme and component styles.
+- `README.md` - user-facing setup and deployment notes.
 
-## Existing Agent/Editor Rules
+## Existing Agent / Editor Rules
 
 - No `.cursorrules` file exists.
 - No `.cursor/rules/` directory exists.
 - No `.github/copilot-instructions.md` file exists.
-- This AGENTS.md is the primary agent instruction file in this repository.
+- This file is the canonical in-repo instruction source for coding agents.
 
-## Environment Requirements
+## Environment Expectations
 
-- Python runtime is pinned in `runtime.txt`.
+- Python version is pinned in `runtime.txt`.
 - `DATABASE_URL` is required at startup.
-- In production, `SECRET_KEY` is required.
-- In production, `LEAGUE_ADMIN_USERNAME` and `LEAGUE_ADMIN_PASSWORD` are required.
-- Render deployment uses `gunicorn app:app`.
+- Production requires `SECRET_KEY`.
+- Production bootstrap may require `LEAGUE_ADMIN_USERNAME` and `LEAGUE_ADMIN_PASSWORD`.
+- The app expects PostgreSQL and normalizes `postgres://` and `postgresql://` URLs to `postgresql+psycopg://`.
+- The app calls `db.create_all()` during startup; a working database connection is required to boot.
 
 ## Setup Commands
 
-- Create venv: `python -m venv .venv`
-- Activate venv: `source .venv/bin/activate`
+- Create virtualenv: `python -m venv .venv`
+- Activate virtualenv: `source .venv/bin/activate`
 - Install dependencies: `pip install -r requirements.txt`
 - Reinstall after dependency changes: `pip install -r requirements.txt`
 
 ## Run Commands
 
-- Local dev server: `DATABASE_URL=postgresql+psycopg://... python app.py`
-- Production-style server: `DATABASE_URL=postgresql+psycopg://... SECRET_KEY=... gunicorn app:app`
+- Local dev server:
+  `export DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST:PORT/DBNAME && python app.py`
+- Production-style local run:
+  `DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST:PORT/DBNAME SECRET_KEY=change-me LEAGUE_ADMIN_USERNAME=admin LEAGUE_ADMIN_PASSWORD=strong-password FLASK_ENV=production gunicorn app:app`
 
 ## Build / Lint / Test Commands
 
-There is no formal linting or test suite configured right now.
+There is no formal lint configuration and no committed automated test suite right now.
 
-Use these validation commands instead:
+Use these validation commands before finishing non-trivial changes:
 
-- Python syntax check: `python -m py_compile app.py admin.py auth.py models.py`
+- Python syntax check:
+  `python -m py_compile app.py admin.py auth.py models.py league.py`
 - Template parse check:
-  `python -c "from jinja2 import Environment, FileSystemLoader; env=Environment(loader=FileSystemLoader('templates')); [env.get_template(name) for name in ['index.html','admin.html','login.html','_theme_head.html']]; print('templates ok')"`
-- Dependency install check: `pip install -r requirements.txt`
-- Render config sanity check: review `render.yaml` and ensure required env vars are set.
+  `python -c "from jinja2 import Environment, FileSystemLoader; env=Environment(loader=FileSystemLoader('templates')); [env.get_template(name) for name in ['index.html','admin.html','login.html','_theme_head.html','admin_overview.html']]; print('templates ok')"`
+- Dependency install sanity check:
+  `pip install -r requirements.txt`
+- Render config review:
+  inspect `render.yaml` and verify required env vars are represented.
 
 ## Single-Test Guidance
 
-- There is currently no `tests/` directory and no `pytest` config in this repo.
+- There is currently no `tests/` directory.
+- There is currently no configured `pytest` suite.
 - Because no automated tests exist, there is no real single-test command today.
-- If you add pytest later, use this convention for one test:
-  `pytest tests/test_file.py::test_name`
-- If you add a test class later, use:
-  `pytest tests/test_file.py::TestClass::test_name`
-- Do not document or assume pytest exists unless you add it in the same change.
+- If you add `pytest`, use these exact single-test patterns:
+  - `pytest tests/test_file.py::test_name`
+  - `pytest tests/test_file.py::TestClass::test_name`
+- If you add tests in a change, update this file with the real commands you introduced.
 
 ## Deployment Notes
 
-- Render web service and database are defined in `render.yaml`.
-- `DATABASE_URL` from Render may arrive as `postgres://` or `postgresql://`; app code normalizes it to `postgresql+psycopg://`.
-- Startup runs `db.create_all()` automatically, so boot requires a working database connection.
-- Do not remove the production env checks unless explicitly requested.
-- Keep `README.md` and this file in sync if deployment steps change.
+- Deploy target is Render.
+- Render service and Postgres database are declared in `render.yaml`.
+- Start command is `gunicorn app:app --bind 0.0.0.0:$PORT`.
+- Do not remove production env guards unless explicitly asked.
+- Keep deployment documentation aligned between `README.md` and this file.
+
+## Architecture Notes
+
+- `User.is_admin` is the global admin flag.
+- `LeagueMembership.role` is league-scoped and currently uses `user` or `moderator`.
+- League access is enforced server-side through `login_required`, `admin_required`, and `load_league_context()`.
+- Invite links should support both logged-in and logged-out users.
+- Invalid league access typically redirects through the app's 404 handling rather than showing a raw not-found page.
+- Schema compatibility is maintained in `league.py` through startup patch helpers rather than a formal migration system.
 
 ## Code Style Guidelines
 
 ### General
 
-- Follow the existing simple Flask style; prefer small modules and straightforward route handlers.
-- Keep changes minimal and local unless a shared helper clearly reduces duplication.
-- Preserve server-rendered Jinja patterns instead of introducing frontend frameworks.
+- Keep the code simple and explicit; this repo favors straightforward Flask patterns over abstraction-heavy architecture.
+- Prefer small helpers when they remove clear duplication, but avoid introducing frameworks or large service layers.
+- Match existing structure and naming in the file you are editing.
 - Use ASCII by default.
 
 ### Imports
 
-- Group imports in this order: standard library, third-party, local modules.
-- Keep one import per line when practical.
-- Avoid unused imports.
-- Prefer explicit imports over wildcard imports.
+- Order imports as: standard library, third-party, local modules.
+- Keep imports explicit; do not use wildcard imports.
+- Remove unused imports when touching a file.
+- Prefer one logical import line per source unless a grouped import is already clearer and matches local style.
 
 ### Formatting
 
-- Match the existing 4-space indentation style.
-- Keep route handlers readable; avoid unnecessary nesting.
-- Prefer short blocks and early returns where helpful.
-- Preserve surrounding file style even if it is not perfect.
-- Do not introduce a formatter-specific style that clashes with the current codebase.
-
-### Naming
-
-- Use `snake_case` for functions, variables, and module-level helpers.
-- Use `PascalCase` for SQLAlchemy model classes.
-- Use clear route/helper names like `update_fixture_datetime` rather than abbreviations.
-- Template class names should stay descriptive and aligned with current naming patterns.
+- Use 4-space indentation.
+- Preserve the current style of short functions, direct control flow, and early returns.
+- Keep route handlers readable; avoid deep nesting when a guard clause works.
+- Do not introduce tool-specific formatting churn without need.
 
 ### Types
 
-- The repo does not currently use type hints consistently.
-- Do not add broad type-annotation churn just for style.
-- Add targeted type hints only when they materially improve a new helper or reduce ambiguity.
+- The repository is not consistently type-annotated.
+- Do not add broad type-hint churn to old files.
+- Add targeted type hints only when writing new helpers where they materially improve clarity.
 
-### Flask / Route Conventions
+### Naming
 
-- Keep decorators close to the function they protect.
-- Use `@login_required` and `@admin_required` consistently for permission boundaries.
-- Redirect back to the relevant page after POST actions unless there is a strong reason not to.
-- Keep route behavior explicit; avoid hidden side effects.
+- Use `snake_case` for functions, variables, routes, and helpers.
+- Use `PascalCase` for SQLAlchemy model classes.
+- Use descriptive names for route handlers, such as `join_league_from_link` rather than vague verbs.
+- Keep template IDs and class names descriptive and aligned with existing UI naming.
+
+### Flask Conventions
+
+- Keep decorators immediately above the protected function.
+- Use `@login_required` for authenticated routes and `@admin_required` for global admin routes.
+- For league-scoped access, rely on `load_league_context()` instead of duplicating permission logic.
+- Redirect after successful POST requests.
+- Use `flash()` for user-visible outcomes when a form or invite action succeeds or fails.
 
 ### Database Conventions
 
-- Use SQLAlchemy models from `models.py`.
+- Use models and shared helpers from `models.py` and `league.py` rather than reimplementing queries ad hoc.
 - Commit only after a coherent unit of work is complete.
-- Avoid partial writes where one half of a multi-step update can commit without the other.
-- When changing fixture state, keep `played`, `home_goals`, and `away_goals` logically consistent.
-- Be careful with destructive queries such as league resets and deletes.
+- Keep fixture state logically consistent: if scores are present, `played` should match.
+- Be cautious with delete operations; understand related memberships, teams, fixtures, and seasons first.
+- Avoid schema changes that bypass the current compatibility helpers unless you are intentionally changing that approach.
 
 ### Error Handling
 
 - Fail fast for missing required production configuration.
-- For user-driven form actions, prefer safe guards plus redirect over uncaught exceptions.
-- Do not silently swallow important failures.
-- Avoid broad `except` unless there is a clear reason; if catching broadly, keep the block small and intentional.
-- Prefer validation before mutation.
+- For user-driven invalid input, prefer validation plus redirect/flash instead of uncaught exceptions.
+- Catch narrow exception types where possible.
+- Avoid broad `except Exception` blocks.
+- Validate before mutating database state.
 
-### Security / Auth
+### Security and Auth
 
-- Treat auth changes as high-risk.
-- Keep server-side authorization checks even if the UI hides controls.
-- Do not introduce insecure production fallbacks for secrets or admin credentials.
-- Preserve password hashing via Werkzeug helpers.
+- Treat auth, role, and membership changes as sensitive.
+- Keep authorization checks on the server even if the UI hides controls.
+- Preserve password hashing through Werkzeug helpers.
+- Do not add insecure production fallbacks for secrets or admin credentials.
+- Be careful not to create routes that let users cross league boundaries without membership checks.
 
-### Templates / UI
+### Templates and UI
 
-- Reuse shared styles in `templates/_theme_head.html` instead of scattering one-off inline styles.
-- Keep mobile behavior in mind when adding new layout classes.
-- Avoid adding UI text that clutters compact cards unless it clearly improves usability.
-- Match existing card, chip, button, and spacing patterns.
+- Reuse shared styling patterns from `templates/_theme_head.html`.
+- Keep the app server-rendered; do not add a frontend framework.
+- Prefer compact, intentional UI copy over explanatory filler text.
+- Maintain working mobile layouts when changing cards, tables, modals, and header actions.
+- When changing invite/join flows, update both backend behavior and any copied/share link in the templates.
 
 ### Comments
 
 - Keep comments sparse.
-- Use comments only where logic is genuinely non-obvious.
-- Avoid narrating obvious code.
+- Add comments only when a block is non-obvious.
+- Do not narrate straightforward code.
 
-## Change Management Guidance
+## Change Management
 
-- Before editing, inspect nearby code and match local conventions.
-- If you change permissions or environment handling, verify the full flow, not just the template.
-- If you add new commands or tooling, update this file.
-- If you add tests, add the exact test and single-test commands here.
+- Read nearby code before editing and match local conventions.
+- If you change env handling, auth, permissions, or deployment behavior, verify the full flow.
+- If you add tooling, tests, or new validation commands, update this file.
+- If you add editor-specific rules later, summarize them here too.
 
 ## Preferred Validation Before Finishing
 
-- Run `python -m py_compile app.py admin.py auth.py models.py`
+- Run `python -m py_compile app.py admin.py auth.py models.py league.py`.
 - Run the Jinja template parse check.
-- If config changed, sanity-check startup assumptions against `render.yaml`.
-- If UI changed, review both desktop and mobile-critical templates.
+- If you changed templates, verify the affected page flow mentally for both desktop and mobile.
+- If you changed auth, invites, or league access, verify both logged-in and logged-out paths.
+- If you changed deployment config, cross-check `render.yaml` and required environment variables.

@@ -204,6 +204,29 @@ def join_league():
     return redirect(url_for('league_dashboard', league_slug=league.slug))
 
 
+@app.route('/join/<join_code>')
+def join_league_from_link(join_code):
+    league = get_league_by_join_code(join_code)
+    if league is None:
+        flash('That league code is invalid.', 'error')
+        if getattr(g, 'user', None) is None:
+            return redirect(url_for('auth.login'))
+        return redirect(url_for('index'))
+
+    if getattr(g, 'user', None) is None:
+        return redirect(url_for('auth.login', join_code=league.join_code))
+
+    membership, created = add_user_to_league(g.user, league)
+    if created:
+        db.session.commit()
+        flash(f'You joined {league.name}.', 'success')
+    else:
+        flash(f'You already belong to {league.name}.', 'error')
+
+    session['active_league_slug'] = league.slug
+    return redirect(url_for('league_dashboard', league_slug=league.slug))
+
+
 @app.errorhandler(404)
 def handle_not_found(_error):
     if getattr(g, 'user', None) is None:

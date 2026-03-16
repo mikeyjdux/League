@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: league-simple
+    name: LeagueOn
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
@@ -15,8 +15,10 @@ services:
         generateValue: true
       - key: LEAGUE_ADMIN_USERNAME
         sync: false
+        value: Admin
       - key: LEAGUE_ADMIN_PASSWORD
         sync: false
+        value: admin123
       - key: FLASK_ENV
         value: production
 
