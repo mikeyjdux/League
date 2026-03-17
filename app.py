@@ -1,7 +1,9 @@
 import os
+from typing import Any, cast
 from datetime import datetime
 
 from flask import Flask, flash, g, redirect, render_template, request, session, url_for
+from sqlalchemy.orm import joinedload
 from flask_wtf.csrf import CSRFError, CSRFProtect, generate_csrf
 
 from admin import admin_bp
@@ -92,12 +94,20 @@ def league_dashboard(league_slug):
 
     table_data = build_standings(season)
     upcoming = (
-        Fixture.query.filter_by(season_id=season.id, played=False)
+        Fixture.query.options(
+            joinedload(cast(Any, Fixture.home_team)),  # pyright: ignore[reportArgumentType]
+            joinedload(cast(Any, Fixture.away_team)),  # pyright: ignore[reportArgumentType]
+        )
+        .filter_by(season_id=season.id, played=False)
         .order_by(Fixture.fixture_time.asc())
         .all()
     )
     results = (
-        Fixture.query.filter_by(season_id=season.id, played=True)
+        Fixture.query.options(
+            joinedload(cast(Any, Fixture.home_team)),  # pyright: ignore[reportArgumentType]
+            joinedload(cast(Any, Fixture.away_team)),  # pyright: ignore[reportArgumentType]
+        )
+        .filter_by(season_id=season.id, played=True)
         .order_by(Fixture.fixture_time.desc())
         .all()
     )
@@ -107,9 +117,7 @@ def league_dashboard(league_slug):
 @app.route('/leagues/<league_slug>/fixtures/<int:fixture_id>/result', methods=['POST'])
 @login_required
 def submit_fixture_result(league_slug, fixture_id):
-    _, season, membership = load_league_context(g.user, league_slug)
-    if not g.user.is_admin and (membership is None or membership.role != 'moderator'):
-        return redirect(url_for('league_dashboard', league_slug=league_slug))
+    _, season, _ = load_league_context(g.user, league_slug, require_manager=True)
 
     fixture = Fixture.query.filter_by(id=fixture_id, season_id=season.id).first_or_404()
 
@@ -130,9 +138,7 @@ def submit_fixture_result(league_slug, fixture_id):
 @app.route('/leagues/<league_slug>/teams', methods=['POST'])
 @login_required
 def add_team(league_slug):
-    _, season, membership = load_league_context(g.user, league_slug)
-    if not g.user.is_admin and (membership is None or membership.role != 'moderator'):
-        return redirect(url_for('league_dashboard', league_slug=league_slug))
+    _, season, _ = load_league_context(g.user, league_slug, require_manager=True)
 
     name = request.form.get('team_name', '').strip()
     if not name:
@@ -168,9 +174,7 @@ def add_team(league_slug):
 @app.route('/leagues/<league_slug>/fixtures/<int:fixture_id>/schedule', methods=['POST'])
 @login_required
 def reschedule_fixture(league_slug, fixture_id):
-    _, season, membership = load_league_context(g.user, league_slug)
-    if not g.user.is_admin and (membership is None or membership.role != 'moderator'):
-        return redirect(url_for('league_dashboard', league_slug=league_slug))
+    _, season, _ = load_league_context(g.user, league_slug, require_manager=True)
 
     fixture = Fixture.query.filter_by(id=fixture_id, season_id=season.id).first_or_404()
     fixture_date = request.form.get('fixture_date', '').strip()

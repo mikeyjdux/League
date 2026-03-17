@@ -1,6 +1,9 @@
+from typing import Any, cast
 from datetime import datetime
 
 from flask import Blueprint, flash, g, redirect, render_template, request, session, url_for
+from sqlalchemy import func
+from sqlalchemy.orm import joinedload, selectinload
 
 from auth import admin_required, login_required
 from league import LEAGUE_ROLE_MODERATOR, create_league_with_admin, delete_league, get_user_admin_leagues, get_user_leagues, load_league_context
@@ -20,21 +23,63 @@ def parse_optional_score(value):
     return score
 
 def prepare_admin_overview_context():
-    leagues = League.query.order_by(League.name.asc()).all()
+    leagues = (
+        League.query.options(
+            selectinload(cast(Any, League.seasons)),  # pyright: ignore[reportArgumentType]
+            selectinload(cast(Any, League.memberships)),  # pyright: ignore[reportArgumentType]
+        )
+        .order_by(League.name.asc())
+        .all()
+    )
     user_league_ids = {membership.league_id for membership in g.user.memberships}
+
+    active_season_ids = []
     for league in leagues:
-        league.active_season = next((season for season in league.seasons if season.is_active), None)
+        active_season = next((season for season in league.seasons if season.is_active), None)
+        league.active_season = active_season
+        if active_season is not None:
+            active_season_ids.append(active_season.id)
+
+    team_counts = {}
+    fixture_counts = {}
+    if active_season_ids:
+        team_counts = {
+            season_id: count
+            for season_id, count in (
+                db.session.query(Team.season_id, func.count(Team.id))
+                .filter(Team.season_id.in_(active_season_ids))
+                .group_by(Team.season_id)
+                .all()
+            )
+        }
+        fixture_counts = {
+            season_id: count
+            for season_id, count in (
+                db.session.query(Fixture.season_id, func.count(Fixture.id))
+                .filter(Fixture.season_id.in_(active_season_ids))
+                .group_by(Fixture.season_id)
+                .all()
+            )
+        }
+
+    for league in leagues:
         league.member_count = len(league.memberships)
         league.moderator_count = sum(1 for membership in league.memberships if membership.role == LEAGUE_ROLE_MODERATOR)
         league.user_has_access = league.id in user_league_ids
         if league.active_season is not None:
-            league.team_count = Team.query.filter_by(season_id=league.active_season.id).count()
-            league.fixture_count = Fixture.query.filter_by(season_id=league.active_season.id).count()
+            league.team_count = team_counts.get(league.active_season.id, 0)
+            league.fixture_count = fixture_counts.get(league.active_season.id, 0)
         else:
             league.team_count = 0
             league.fixture_count = 0
 
-    users = User.query.order_by(User.username.asc()).all()
+    users = (
+        User.query.options(
+            selectinload(cast(Any, User.memberships)).selectinload(cast(Any, LeagueMembership.league)),  # pyright: ignore[reportArgumentType]
+        )
+        .order_by(User.username.asc())
+        .all()
+    )
     for user in users:
         memberships = sorted(user.memberships, key=lambda membership: membership.league.name.lower())
         user.sorted_memberships = memberships
@@ -159,24 +204,29 @@ def league_manager(league_slug):
     _, season, _ = load_league_context(g.user, league_slug, require_manager=True)
     teams = Team.query.filter_by(season_id=season.id).order_by(Team.name.asc()).all()
     fixtures = (
-        Fixture.query.filter_by(season_id=season.id)
+        Fixture.query.options(
+            joinedload(cast(Any, Fixture.home_team)),  # pyright: ignore[reportArgumentType]
+            joinedload(cast(Any, Fixture.away_team)),  # pyright: ignore[reportArgumentType]
+        )
+        .filter_by(season_id=season.id)
         .order_by(Fixture.fixture_time.asc())
         .all()
     )
-    users = (
-        User.query.join(LeagueMembership, LeagueMembership.user_id == User.id)
-        .filter(LeagueMembership.league_id == g.current_league.id)
+    memberships = (
+        LeagueMembership.query.options(joinedload(cast(Any, LeagueMembership.user)))  # pyright: ignore[reportArgumentType]
+        .filter_by(league_id=g.current_league.id)
+        .join(User, LeagueMembership.user_id == User.id)
         .order_by(User.username.asc())
         .all()
     )
     moderator_count = 0
-    for user in users:
-        user.league_is_moderator = any(
-            membership.league_id == g.current_league.id and membership.role == LEAGUE_ROLE_MODERATOR
-            for membership in user.memberships
-        )
+    users = []
+    for membership in memberships:
+        user = membership.user
+        user.league_is_moderator = membership.role == LEAGUE_ROLE_MODERATOR
         if user.league_is_moderator:
             moderator_count += 1
+        users.append(user)
 
     return render_template('admin.html', teams=teams, fixtures=fixtures, users=users, moderator_count=moderator_count)
 
