@@ -11,7 +11,7 @@ Small Flask app for running football leagues with standings, fixtures, league me
 - Global admin tools for leagues, users, and moderator assignment
 - League moderator tools for teams and fixtures
 - Server-rendered league table with upcoming fixtures and recorded results
-- GitHub Actions deployment over SSH to a Linux server
+- GitHub Actions deployment via a self-hosted runner on the production server
 
 ## Stack
 
@@ -141,15 +141,31 @@ Production deploys are triggered automatically by GitHub Actions whenever `main`
 - The Python virtualenv lives at `/opt/leagueon/app/.venv`.
 - The systemd service is `leagueon.service`.
 - A deploy script is installed on the server at `/opt/leagueon/bin/deploy-leagueon`.
+- A self-hosted GitHub Actions runner is installed on the server, typically at `/opt/actions-runner`.
 
-### GitHub Actions secrets
+### Self-hosted runner setup
 
-Configure these repository secrets before enabling auto-deploy:
+Create a dedicated runner user and install the GitHub Actions runner service on the production server:
 
-- `SSH_HOST`
-- `SSH_USER`
-- `SSH_PRIVATE_KEY`
-- `SSH_PORT` (optional, defaults to `22`)
+```bash
+sudo adduser --system --group --home /opt/actions-runner github-runner
+sudo install -d -o github-runner -g github-runner /opt/actions-runner
+```
+
+Download the latest Linux ARM64 runner package from GitHub, extract it into `/opt/actions-runner`, and configure it against this repository as the `github-runner` user:
+
+```bash
+sudo -u github-runner bash
+cd /opt/actions-runner
+curl -L -o actions-runner.tar.gz https://github.com/actions/runner/releases/latest/download/actions-runner-linux-arm64-<version>.tar.gz
+tar xzf actions-runner.tar.gz
+./config.sh --url https://github.com/mikeyjdux/League --token <registration-token> --labels self-hosted,linux,arm64
+exit
+sudo /opt/actions-runner/svc.sh install github-runner
+sudo /opt/actions-runner/svc.sh start
+```
+
+Generate the registration token from GitHub under `Settings` -> `Actions` -> `Runners` -> `New self-hosted runner`.
 
 ### Server deploy script install
 
@@ -161,6 +177,14 @@ sudo install -m 0755 scripts/deploy_leagueon.sh /opt/leagueon/bin/deploy-leagueo
 ```
 
 The deploy user should be allowed to restart only `leagueon.service` with `sudo`.
+
+The `github-runner` user should be allowed to execute the deploy script as `leagueon`:
+
+```bash
+echo 'github-runner ALL=(leagueon) NOPASSWD: /opt/leagueon/bin/deploy-leagueon' | sudo tee /etc/sudoers.d/github-runner-deploy >/dev/null
+sudo chmod 440 /etc/sudoers.d/github-runner-deploy
+sudo visudo -cf /etc/sudoers.d/github-runner-deploy
+```
 
 ### What each deploy does
 
@@ -176,6 +200,7 @@ The deploy user should be allowed to restart only `leagueon.service` with `sudo`
 - Production startup fails fast if `SECRET_KEY` is missing.
 - Production startup also fails if `LEAGUE_ADMIN_USERNAME` or `LEAGUE_ADMIN_PASSWORD` is missing and no admin user exists yet.
 - Production deploys are deterministic because the server resets to `origin/main` on every run; do not make manual edits inside `/opt/leagueon/app`.
+- The self-hosted runner only needs outbound internet access; the server does not need to be publicly reachable.
 
 ## Auth and Permissions
 

@@ -7,7 +7,7 @@ Guidance for coding agents working in `/home/mduxbury/Footy/league_simple`.
 - Flask app for managing football leagues, seasons, teams, fixtures, users, and roles.
 - Server-rendered UI with Jinja templates in `templates/`.
 - PostgreSQL-backed data model via Flask-SQLAlchemy.
-- Production deploys are handled by GitHub Actions over SSH.
+- Production deploys are handled by GitHub Actions via a self-hosted runner.
 - Current branding is `LeagueOn`.
 
 ## Key Files
@@ -81,7 +81,7 @@ Use these validation commands before finishing non-trivial changes:
 
 ## Deployment Notes
 
-- Deploy target is a Linux server reachable over SSH.
+- Deploy target is a Linux server with a self-hosted GitHub Actions runner.
 - GitHub Actions triggers production deploys on pushes to `main`.
 - The production app lives at `/opt/leagueon/app`.
 - The production systemd service is `leagueon.service`.
