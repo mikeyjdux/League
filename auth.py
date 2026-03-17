@@ -10,6 +10,22 @@ from models import User, db
 auth_bp = Blueprint('auth', __name__)
 
 
+def redirect_to_login(join_code=''):
+    if join_code:
+        return redirect(url_for('auth.login', join_code=join_code))
+    return redirect(url_for('auth.login'))
+
+
+def get_user_by_username(username):
+    return User.query.filter_by(username=username).first()
+
+
+def redirect_authenticated_user():
+    if g.user is not None:
+        return redirect(url_for('index'))
+    return None
+
+
 @auth_bp.before_app_request
 def load_logged_in_user():
     user_id = session.get('user_id')
@@ -23,7 +39,7 @@ def login_required(view):
     @wraps(view)
     def wrapped_view(*args, **kwargs):
         if g.user is None:
-            return redirect(url_for('auth.login'))
+            return redirect_to_login()
         return view(*args, **kwargs)
 
     return wrapped_view
@@ -33,7 +49,7 @@ def admin_required(view):
     @wraps(view)
     def wrapped_view(*args, **kwargs):
         if g.user is None:
-            return redirect(url_for('auth.login'))
+            return redirect_to_login()
         if not g.user.is_admin:
             return redirect(url_for('index'))
         return view(*args, **kwargs)
@@ -50,13 +66,14 @@ def log_in_user(user):
 def login():
     error = None
     invite_join_code = normalize_join_code(request.args.get('join_code', ''))
-    if g.user is not None:
-        return redirect(url_for('index'))
+    authenticated_redirect = redirect_authenticated_user()
+    if authenticated_redirect is not None:
+        return authenticated_redirect
 
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
-        user = User.query.filter_by(username=username).first()
+        user = get_user_by_username(username)
 
         if not user or not user.check_password(password):
             error = 'Invalid username or password.'
@@ -69,30 +86,26 @@ def login():
 
 @auth_bp.route('/register', methods=['POST'])
 def register():
-    if g.user is not None:
-        return redirect(url_for('index'))
+    authenticated_redirect = redirect_authenticated_user()
+    if authenticated_redirect is not None:
+        return authenticated_redirect
 
     username = request.form.get('username', '').strip()
     password = request.form.get('password', '')
     join_code = normalize_join_code(request.form.get('join_code', ''))
 
-    def redirect_to_login_with_code():
-        if join_code:
-            return redirect(url_for('auth.login', join_code=join_code))
-        return redirect(url_for('auth.login'))
-
     if not username or not password or not join_code:
         flash('Username, password, and a valid league code are required.', 'error')
-        return redirect_to_login_with_code()
+        return redirect_to_login(join_code)
 
-    if User.query.filter_by(username=username).first() is not None:
+    if get_user_by_username(username) is not None:
         flash('That username is already taken.', 'error')
-        return redirect_to_login_with_code()
+        return redirect_to_login(join_code)
 
     league = get_league_by_join_code(join_code)
     if league is None:
         flash('That league code is invalid.', 'error')
-        return redirect_to_login_with_code()
+        return redirect_to_login(join_code)
 
     user = User()
     user.username = username
@@ -111,7 +124,7 @@ def register():
 @login_required
 def logout():
     session.clear()
-    return redirect(url_for('auth.login'))
+    return redirect_to_login()
 
 
 def ensure_admin_user():
@@ -128,7 +141,7 @@ def ensure_admin_user():
 
     password = password or 'admin123'
 
-    user = User.query.filter_by(username=username).first()
+    user = get_user_by_username(username)
     if user is None:
         user = User()
         user.username = username

@@ -17,6 +17,7 @@ from league import (
     get_user_leagues,
     load_league_context,
     add_user_to_league,
+    parse_score_value,
 )
 from models import Fixture, Team, db
 
@@ -71,11 +72,24 @@ def inject_league_navigation():
     }
 
 
-def parse_score(value):
-    score = int(value)
-    if score < 0:
-        raise ValueError('Scores cannot be negative.')
-    return score
+def redirect_to_league_dashboard(league_slug):
+    return redirect(url_for('league_dashboard', league_slug=league_slug))
+
+
+def get_season_fixture_or_404(season_id, fixture_id):
+    return Fixture.query.filter_by(id=fixture_id, season_id=season_id).first_or_404()
+
+
+def join_current_user_to_league(league):
+    _, created = add_user_to_league(g.user, league)
+    if created:
+        db.session.commit()
+        flash(f'You joined {league.name}.', 'success')
+    else:
+        flash(f'You already belong to {league.name}.', 'error')
+
+    session['active_league_slug'] = league.slug
+    return created
 
 
 @app.route('/')
@@ -84,7 +98,7 @@ def index():
     league = get_active_league_for_user(g.user)
     if league is None:
         return render_template('index.html', table=[], upcoming=[], results=[])
-    return redirect(url_for('league_dashboard', league_slug=league.slug))
+    return redirect_to_league_dashboard(league.slug)
 
 
 @app.route('/leagues/<league_slug>/')
@@ -112,20 +126,20 @@ def league_dashboard(league_slug):
 def submit_fixture_result(league_slug, fixture_id):
     _, season, _ = load_league_context(g.user, league_slug, require_manager=True)
 
-    fixture = Fixture.query.filter_by(id=fixture_id, season_id=season.id).first_or_404()
+    fixture = get_season_fixture_or_404(season.id, fixture_id)
 
     if fixture.played:
-        return redirect(url_for('league_dashboard', league_slug=league_slug))
+        return redirect_to_league_dashboard(league_slug)
 
     try:
-        fixture.home_goals = parse_score(request.form.get('home_goals', ''))
-        fixture.away_goals = parse_score(request.form.get('away_goals', ''))
+        fixture.home_goals = parse_score_value(request.form.get('home_goals', ''))
+        fixture.away_goals = parse_score_value(request.form.get('away_goals', ''))
     except (TypeError, ValueError):
-        return redirect(url_for('league_dashboard', league_slug=league_slug))
+        return redirect_to_league_dashboard(league_slug)
 
     fixture.played = True
     db.session.commit()
-    return redirect(url_for('league_dashboard', league_slug=league_slug))
+    return redirect_to_league_dashboard(league_slug)
 
 
 @app.route('/leagues/<league_slug>/teams', methods=['POST'])
@@ -135,11 +149,11 @@ def add_team(league_slug):
 
     name = request.form.get('team_name', '').strip()
     if not name:
-        return redirect(url_for('league_dashboard', league_slug=league_slug))
+        return redirect_to_league_dashboard(league_slug)
 
     existing_team = Team.query.filter_by(season_id=season.id, name=name).first()
     if existing_team is not None:
-        return redirect(url_for('league_dashboard', league_slug=league_slug))
+        return redirect_to_league_dashboard(league_slug)
 
     existing_team_ids = [team_id for team_id, in db.session.query(Team.id).filter_by(season_id=season.id).all()]
 
@@ -169,7 +183,7 @@ def add_team(league_slug):
         db.session.bulk_insert_mappings(cast(Any, Fixture), fixture_rows)
 
     db.session.commit()
-    return redirect(url_for('league_dashboard', league_slug=league_slug))
+    return redirect_to_league_dashboard(league_slug)
 
 
 @app.route('/leagues/<league_slug>/fixtures/<int:fixture_id>/schedule', methods=['POST'])
@@ -177,19 +191,19 @@ def add_team(league_slug):
 def reschedule_fixture(league_slug, fixture_id):
     _, season, _ = load_league_context(g.user, league_slug, require_manager=True)
 
-    fixture = Fixture.query.filter_by(id=fixture_id, season_id=season.id).first_or_404()
+    fixture = get_season_fixture_or_404(season.id, fixture_id)
     fixture_date = request.form.get('fixture_date', '').strip()
 
     if fixture.played or not fixture_date:
-        return redirect(url_for('league_dashboard', league_slug=league_slug))
+        return redirect_to_league_dashboard(league_slug)
 
     try:
         fixture.fixture_time = datetime.strptime(fixture_date, '%Y-%m-%dT%H:%M')
     except ValueError:
-        return redirect(url_for('league_dashboard', league_slug=league_slug))
+        return redirect_to_league_dashboard(league_slug)
 
     db.session.commit()
-    return redirect(url_for('league_dashboard', league_slug=league_slug))
+    return redirect_to_league_dashboard(league_slug)
 
 
 @app.route('/leagues/join', methods=['POST'])
@@ -201,15 +215,8 @@ def join_league():
         flash('That league code is invalid.', 'error')
         return redirect(url_for('index'))
 
-    membership, created = add_user_to_league(g.user, league)
-    if not created:
-        flash(f'You already belong to {league.name}.', 'error')
-        return redirect(url_for('league_dashboard', league_slug=league.slug))
-
-    db.session.commit()
-    session['active_league_slug'] = league.slug
-    flash(f'You joined {league.name}.', 'success')
-    return redirect(url_for('league_dashboard', league_slug=league.slug))
+    join_current_user_to_league(league)
+    return redirect_to_league_dashboard(league.slug)
 
 
 @app.route('/join/<join_code>')
@@ -224,15 +231,8 @@ def join_league_from_link(join_code):
     if getattr(g, 'user', None) is None:
         return redirect(url_for('auth.login', join_code=league.join_code))
 
-    membership, created = add_user_to_league(g.user, league)
-    if created:
-        db.session.commit()
-        flash(f'You joined {league.name}.', 'success')
-    else:
-        flash(f'You already belong to {league.name}.', 'error')
-
-    session['active_league_slug'] = league.slug
-    return redirect(url_for('league_dashboard', league_slug=league.slug))
+    join_current_user_to_league(league)
+    return redirect_to_league_dashboard(league.slug)
 
 
 @app.errorhandler(404)
@@ -242,7 +242,7 @@ def handle_not_found(_error):
 
     league = get_active_league_for_user(g.user)
     if league is not None:
-        return redirect(url_for('league_dashboard', league_slug=league.slug))
+        return redirect_to_league_dashboard(league.slug)
 
     return redirect(url_for('index'))
 

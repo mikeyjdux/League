@@ -6,21 +6,34 @@ from sqlalchemy import func
 from sqlalchemy.orm import joinedload, selectinload
 
 from auth import admin_required, login_required
-from league import LEAGUE_ROLE_MODERATOR, create_league_with_admin, delete_league, get_user_admin_leagues, get_user_leagues, load_league_context
+from league import LEAGUE_ROLE_MODERATOR, create_league_with_admin, delete_league, get_user_admin_leagues, get_user_leagues, load_league_context, parse_score_value
 from models import Fixture, League, LeagueMembership, Team, User, db
 
 
 admin_bp = Blueprint('admin', __name__)
 
 
-def parse_optional_score(value):
-    if value in (None, ''):
-        return None
+def redirect_admin_overview():
+    return redirect(url_for('admin.admin_overview'))
 
-    score = int(value)
-    if score < 0:
-        raise ValueError('Scores cannot be negative.')
-    return score
+
+def redirect_admin_league_manager(league_slug):
+    return redirect(url_for('admin.league_manager', league_slug=league_slug))
+
+
+def redirect_after_create_league_failure():
+    fallback_slug = request.form.get('return_league_slug', '').strip()
+    if fallback_slug:
+        return redirect_admin_league_manager(fallback_slug)
+    return redirect(url_for('index'))
+
+
+def get_managed_team_or_404(season_id, team_id):
+    return Team.query.filter_by(id=team_id, season_id=season_id).first_or_404()
+
+
+def get_managed_fixture_or_404(season_id, fixture_id):
+    return Fixture.query.filter_by(id=fixture_id, season_id=season_id).first_or_404()
 
 def prepare_admin_overview_context():
     leagues = (
@@ -91,11 +104,11 @@ def prepare_admin_overview_context():
 
 def redirect_after_league_change(user):
     if user.is_admin:
-        return redirect(url_for('admin.admin_overview'))
+        return redirect_admin_overview()
 
     moderator_leagues = get_user_admin_leagues(user)
     if moderator_leagues:
-        return redirect(url_for('admin.league_manager', league_slug=moderator_leagues[0].slug))
+        return redirect_admin_league_manager(moderator_leagues[0].slug)
 
     leagues = get_user_leagues(user)
     if leagues:
@@ -120,10 +133,7 @@ def create_league():
     slug = request.form.get('league_slug', '').strip()
 
     if not league_name:
-        fallback_slug = request.form.get('return_league_slug', '').strip()
-        if fallback_slug:
-            return redirect(url_for('admin.league_manager', league_slug=fallback_slug))
-        return redirect(url_for('index'))
+        return redirect_after_create_league_failure()
 
     try:
         league, _, _ = create_league_with_admin(
@@ -133,13 +143,10 @@ def create_league():
             requested_slug=slug,
         )
     except ValueError:
-        fallback_slug = request.form.get('return_league_slug', '').strip()
-        if fallback_slug:
-            return redirect(url_for('admin.league_manager', league_slug=fallback_slug))
-        return redirect(url_for('index'))
+        return redirect_after_create_league_failure()
 
     flash(f'League created. Join code: {league.join_code}', 'success')
-    return redirect(url_for('admin.league_manager', league_slug=league.slug))
+    return redirect_admin_league_manager(league.slug)
 
 
 @admin_bp.route('/admin/users/<int:user_id>/reset_password', methods=['POST'])
@@ -150,7 +157,7 @@ def reset_user_password_from_admin(user_id):
     if password:
         user.set_password(password)
         db.session.commit()
-    return redirect(url_for('admin.admin_overview'))
+    return redirect_admin_overview()
 
 
 @admin_bp.route('/admin/users/<int:user_id>/delete', methods=['POST'])
@@ -158,15 +165,15 @@ def reset_user_password_from_admin(user_id):
 def delete_user_from_admin(user_id):
     user = User.query.get_or_404(user_id)
     if g.user.id == user.id:
-        return redirect(url_for('admin.admin_overview'))
+        return redirect_admin_overview()
 
     if user.is_admin and User.query.filter_by(is_admin=True).count() <= 1:
-        return redirect(url_for('admin.admin_overview'))
+        return redirect_admin_overview()
 
     LeagueMembership.query.filter_by(user_id=user.id).delete(synchronize_session=False)
     db.session.delete(user)
     db.session.commit()
-    return redirect(url_for('admin.admin_overview'))
+    return redirect_admin_overview()
 
 
 @admin_bp.route('/admin/memberships/<int:membership_id>/toggle_moderator', methods=['POST'])
@@ -177,7 +184,7 @@ def toggle_membership_moderator_from_admin(membership_id):
 
     membership.role = LEAGUE_ROLE_MODERATOR if make_moderator else 'user'
     db.session.commit()
-    return redirect(url_for('admin.admin_overview'))
+    return redirect_admin_overview()
 
 
 @admin_bp.route('/admin/memberships/<int:membership_id>/delete', methods=['POST'])
@@ -187,7 +194,7 @@ def delete_membership_from_admin(membership_id):
 
     db.session.delete(membership)
     db.session.commit()
-    return redirect(url_for('admin.admin_overview'))
+    return redirect_admin_overview()
 
 
 @admin_bp.route('/leagues/<league_slug>/delete', methods=['POST'])
@@ -235,14 +242,14 @@ def league_manager(league_slug):
 @login_required
 def delete_team(league_slug, team_id):
     _, season, _ = load_league_context(g.user, league_slug, require_manager=True)
-    team = Team.query.filter_by(id=team_id, season_id=season.id).first_or_404()
+    team = get_managed_team_or_404(season.id, team_id)
     Fixture.query.filter(
         Fixture.season_id == season.id,
         ((Fixture.home_team_id == team.id) | (Fixture.away_team_id == team.id)),
     ).delete(synchronize_session=False)
     db.session.delete(team)
     db.session.commit()
-    return redirect(url_for('admin.league_manager', league_slug=league_slug))
+    return redirect_admin_league_manager(league_slug)
 
 
 @admin_bp.route('/leagues/<league_slug>/fixtures/<int:fixture_id>/delete', methods=['POST'])
@@ -251,28 +258,28 @@ def delete_fixture(league_slug, fixture_id):
     _, season, _ = load_league_context(g.user, league_slug, require_manager=True)
     Fixture.query.filter_by(id=fixture_id, season_id=season.id).delete(synchronize_session=False)
     db.session.commit()
-    return redirect(url_for('admin.league_manager', league_slug=league_slug))
+    return redirect_admin_league_manager(league_slug)
 
 
 @admin_bp.route('/leagues/<league_slug>/fixtures/<int:fixture_id>', methods=['POST'])
 @login_required
 def update_managed_fixture(league_slug, fixture_id):
     _, season, _ = load_league_context(g.user, league_slug, require_manager=True)
-    fixture = Fixture.query.filter_by(id=fixture_id, season_id=season.id).first_or_404()
+    fixture = get_managed_fixture_or_404(season.id, fixture_id)
 
     try:
         fixture_time = datetime.strptime(request.form['fixture_time'], '%Y-%m-%dT%H:%M')
-        home_goals = parse_optional_score(request.form.get('home_goals'))
-        away_goals = parse_optional_score(request.form.get('away_goals'))
+        home_goals = parse_score_value(request.form.get('home_goals'), allow_blank=True)
+        away_goals = parse_score_value(request.form.get('away_goals'), allow_blank=True)
     except (KeyError, TypeError, ValueError):
-        return redirect(url_for('admin.league_manager', league_slug=league_slug))
+        return redirect_admin_league_manager(league_slug)
 
     if (home_goals is None) != (away_goals is None):
-        return redirect(url_for('admin.league_manager', league_slug=league_slug))
+        return redirect_admin_league_manager(league_slug)
 
     fixture.fixture_time = fixture_time
     fixture.home_goals = home_goals
     fixture.away_goals = away_goals
     fixture.played = home_goals is not None and away_goals is not None
     db.session.commit()
-    return redirect(url_for('admin.league_manager', league_slug=league_slug))
+    return redirect_admin_league_manager(league_slug)

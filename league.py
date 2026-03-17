@@ -55,6 +55,16 @@ def get_league_by_join_code(value):
     return League.query.filter_by(join_code=join_code).first()
 
 
+def parse_score_value(value, allow_blank=False):
+    if allow_blank and value in (None, ''):
+        return None
+
+    score = int(value)
+    if score < 0:
+        raise ValueError('Scores cannot be negative.')
+    return score
+
+
 def add_user_to_league(user, league, role=LEAGUE_ROLE_USER):
     membership = LeagueMembership.query.filter_by(user_id=user.id, league_id=league.id).first()
     if membership is not None:
@@ -217,66 +227,63 @@ def get_active_season(league):
     )
 
 
-def load_league_context(user, league_slug, require_manager=False):
+def _get_cached_league_context(user, league_slug, require_manager):
     cached_context = getattr(g, 'loaded_league_context', None)
-    if cached_context is not None:
-        cached_user_id = cached_context['user_id']
-        cached_league_slug = cached_context['league_slug']
-        cached_requires_manager = cached_context['require_manager']
-        if cached_user_id == user.id and cached_league_slug == league_slug and cached_requires_manager == require_manager:
-            league = cached_context['league']
-            season = cached_context['season']
-            membership = cached_context['membership']
-            g.current_league = league
-            g.current_membership = membership
-            g.current_season = season
-            session['active_league_slug'] = league.slug
-            return league, season, membership
+    if cached_context is None:
+        return None
 
-    league = None
-    membership = None
+    if cached_context['user_id'] != user.id:
+        return None
+    if cached_context['league_slug'] != league_slug:
+        return None
+    if cached_context['require_manager'] != require_manager:
+        return None
 
+    return cached_context
+
+
+def _resolve_league_for_user(user, league_slug, require_manager):
     if not user.is_admin or not require_manager:
         for user_league in get_user_leagues(user):
             if user_league.slug == league_slug:
-                league = user_league
-                break
+                return user_league
 
-        if league is None:
-            if not user.is_admin:
-                abort(404)
-            league = League.query.filter_by(slug=league_slug).first()
-            if league is None:
-                abort(404)
-        else:
-            membership = LeagueMembership.query.filter_by(user_id=user.id, league_id=league.id).first()
-    else:
-        league = League.query.filter_by(slug=league_slug).first()
-        if league is None:
+        if not user.is_admin:
             abort(404)
 
-    if membership is None and league is not None and (user.is_admin and require_manager):
-        membership = None
-    elif membership is None:
-        membership = LeagueMembership.query.filter_by(user_id=user.id, league_id=league.id).first()
-        if membership is None:
-            abort(404)
+    league = League.query.filter_by(slug=league_slug).first()
+    if league is None:
+        abort(404)
+    return league
 
-    if require_manager and not user.is_admin:
-        if membership is None:
-            abort(404)
-        if membership.role != LEAGUE_ROLE_MODERATOR:
-            abort(404)
 
+def _resolve_membership(user, league, require_manager):
+    if user.is_admin and require_manager:
+        return None
+
+    membership = LeagueMembership.query.filter_by(user_id=user.id, league_id=league.id).first()
+    if membership is None:
+        abort(404)
+    if require_manager and membership.role != LEAGUE_ROLE_MODERATOR:
+        abort(404)
+    return membership
+
+
+def _ensure_active_season(league):
     season = get_active_season(league)
-    if season is None:
-        season = Season()
-        season.league_id = league.id
-        season.name = DEFAULT_SEASON_NAME
-        season.is_active = True
-        db.session.add(season)
-        db.session.commit()
+    if season is not None:
+        return season
 
+    season = Season()
+    season.league_id = league.id
+    season.name = DEFAULT_SEASON_NAME
+    season.is_active = True
+    db.session.add(season)
+    db.session.commit()
+    return season
+
+
+def _store_league_context(user, league_slug, require_manager, league, season, membership):
     g.current_league = league
     g.current_membership = membership
     g.current_season = season
@@ -289,6 +296,21 @@ def load_league_context(user, league_slug, require_manager=False):
         'membership': membership,
     }
     session['active_league_slug'] = league.slug
+
+
+def load_league_context(user, league_slug, require_manager=False):
+    cached_context = _get_cached_league_context(user, league_slug, require_manager)
+    if cached_context is not None:
+        league = cached_context['league']
+        season = cached_context['season']
+        membership = cached_context['membership']
+        _store_league_context(user, league_slug, require_manager, league, season, membership)
+        return league, season, membership
+
+    league = _resolve_league_for_user(user, league_slug, require_manager)
+    membership = _resolve_membership(user, league, require_manager)
+    season = _ensure_active_season(league)
+    _store_league_context(user, league_slug, require_manager, league, season, membership)
     return league, season, membership
 
 
