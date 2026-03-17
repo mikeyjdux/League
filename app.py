@@ -7,7 +7,7 @@ from sqlalchemy.orm import joinedload
 from flask_wtf.csrf import CSRFError, CSRFProtect, generate_csrf
 
 from admin import admin_bp
-from auth import auth_bp, ensure_admin_user, login_required
+from auth import auth_bp, ensure_admin_user, login_required, redirect_to_login
 from league import (
     sync_existing_league_data,
     build_standings,
@@ -89,7 +89,6 @@ def join_current_user_to_league(league):
         flash(f'You already belong to {league.name}.', 'error')
 
     session['active_league_slug'] = league.slug
-    return created
 
 
 @app.route('/')
@@ -225,11 +224,11 @@ def join_league_from_link(join_code):
     if league is None:
         flash('That league code is invalid.', 'error')
         if getattr(g, 'user', None) is None:
-            return redirect(url_for('auth.login'))
+            return redirect_to_login()
         return redirect(url_for('index'))
 
     if getattr(g, 'user', None) is None:
-        return redirect(url_for('auth.login', join_code=league.join_code))
+        return redirect_to_login(league.join_code)
 
     join_current_user_to_league(league)
     return redirect_to_league_dashboard(league.slug)
@@ -238,7 +237,7 @@ def join_league_from_link(join_code):
 @app.errorhandler(404)
 def handle_not_found(_error):
     if getattr(g, 'user', None) is None:
-        return redirect(url_for('auth.login'))
+        return redirect_to_login()
 
     league = get_active_league_for_user(g.user)
     if league is not None:
@@ -251,7 +250,7 @@ def handle_not_found(_error):
 def handle_csrf_error(_error):
     flash('Your session expired or the form token was invalid. Please try again.', 'error')
     if getattr(g, 'user', None) is None:
-        return redirect(url_for('auth.login'))
+        return redirect_to_login()
 
     return redirect(request.referrer or url_for('index'))
 

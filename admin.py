@@ -35,6 +35,7 @@ def get_managed_team_or_404(season_id, team_id):
 def get_managed_fixture_or_404(season_id, fixture_id):
     return Fixture.query.filter_by(id=fixture_id, season_id=season_id).first_or_404()
 
+
 def prepare_admin_overview_context():
     leagues = (
         League.query.options(

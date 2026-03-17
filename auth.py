@@ -20,10 +20,21 @@ def get_user_by_username(username):
     return User.query.filter_by(username=username).first()
 
 
-def redirect_authenticated_user():
+def redirect_if_authenticated():
     if g.user is not None:
         return redirect(url_for('index'))
     return None
+
+
+def create_user_account(username, password, league):
+    user = User()
+    user.username = username
+    user.set_password(password)
+    db.session.add(user)
+    db.session.flush()
+    add_user_to_league(user, league)
+    db.session.commit()
+    return user
 
 
 @auth_bp.before_app_request
@@ -66,7 +77,7 @@ def log_in_user(user):
 def login():
     error = None
     invite_join_code = normalize_join_code(request.args.get('join_code', ''))
-    authenticated_redirect = redirect_authenticated_user()
+    authenticated_redirect = redirect_if_authenticated()
     if authenticated_redirect is not None:
         return authenticated_redirect
 
@@ -86,7 +97,7 @@ def login():
 
 @auth_bp.route('/register', methods=['POST'])
 def register():
-    authenticated_redirect = redirect_authenticated_user()
+    authenticated_redirect = redirect_if_authenticated()
     if authenticated_redirect is not None:
         return authenticated_redirect
 
@@ -107,13 +118,7 @@ def register():
         flash('That league code is invalid.', 'error')
         return redirect_to_login(join_code)
 
-    user = User()
-    user.username = username
-    user.set_password(password)
-    db.session.add(user)
-    db.session.flush()
-    add_user_to_league(user, league)
-    db.session.commit()
+    user = create_user_account(username, password, league)
 
     log_in_user(user)
     flash(f'Account created. You joined {league.name}.', 'success')
