@@ -206,11 +206,15 @@ def get_active_season(league):
     if league is None:
         return None
 
-    season = Season.query.filter_by(league_id=league.id, is_active=True).first()
-    if season is not None:
-        return season
+    cached_season = getattr(g, 'current_season', None)
+    if cached_season is not None and cached_season.league_id == league.id:
+        return cached_season
 
-    return Season.query.filter_by(league_id=league.id).order_by(Season.created_at.desc()).first()
+    return (
+        Season.query.filter_by(league_id=league.id)
+        .order_by(Season.is_active.desc(), Season.created_at.desc())
+        .first()
+    )
 
 
 def load_league_context(user, league_slug, require_manager=False):
@@ -229,16 +233,35 @@ def load_league_context(user, league_slug, require_manager=False):
             session['active_league_slug'] = league.slug
             return league, season, membership
 
-    league = League.query.filter_by(slug=league_slug).first()
-    if league is None:
-        abort(404)
+    league = None
+    membership = None
 
-    membership = LeagueMembership.query.filter_by(user_id=user.id, league_id=league.id).first()
-    if membership is None:
-        if require_manager and user.is_admin:
-            membership = None
+    if not user.is_admin or not require_manager:
+        for user_league in get_user_leagues(user):
+            if user_league.slug == league_slug:
+                league = user_league
+                break
+
+        if league is None:
+            if not user.is_admin:
+                abort(404)
+            league = League.query.filter_by(slug=league_slug).first()
+            if league is None:
+                abort(404)
         else:
+            membership = LeagueMembership.query.filter_by(user_id=user.id, league_id=league.id).first()
+    else:
+        league = League.query.filter_by(slug=league_slug).first()
+        if league is None:
             abort(404)
+
+    if membership is None and league is not None and (user.is_admin and require_manager):
+        membership = None
+    elif membership is None:
+        membership = LeagueMembership.query.filter_by(user_id=user.id, league_id=league.id).first()
+        if membership is None:
+            abort(404)
+
     if require_manager and not user.is_admin:
         if membership is None:
             abort(404)
@@ -271,7 +294,16 @@ def load_league_context(user, league_slug, require_manager=False):
 
 def build_standings(season):
     teams = Team.query.filter_by(season_id=season.id).order_by(Team.name.asc()).all()
-    fixtures = Fixture.query.filter_by(season_id=season.id, played=True).all()
+    fixtures = (
+        db.session.query(
+            Fixture.home_team_id,
+            Fixture.away_team_id,
+            Fixture.home_goals,
+            Fixture.away_goals,
+        )
+        .filter_by(season_id=season.id, played=True)
+        .all()
+    )
 
     table_map = {
         team.id: {
@@ -288,14 +320,14 @@ def build_standings(season):
         for team in teams
     }
 
-    for fixture in fixtures:
-        home_stats = table_map.get(fixture.home_team_id)
-        away_stats = table_map.get(fixture.away_team_id)
+    for home_team_id, away_team_id, home_goals, away_goals in fixtures:
+        home_stats = table_map.get(home_team_id)
+        away_stats = table_map.get(away_team_id)
         if home_stats is None or away_stats is None:
             continue
 
-        home_goals = fixture.home_goals or 0
-        away_goals = fixture.away_goals or 0
+        home_goals = home_goals or 0
+        away_goals = away_goals or 0
 
         home_stats['played'] += 1
         away_stats['played'] += 1

@@ -93,24 +93,17 @@ def league_dashboard(league_slug):
     _, season, _ = load_league_context(g.user, league_slug)
 
     table_data = build_standings(season)
-    upcoming = (
+    fixtures = (
         Fixture.query.options(
             joinedload(cast(Any, Fixture.home_team)),  # pyright: ignore[reportArgumentType]
             joinedload(cast(Any, Fixture.away_team)),  # pyright: ignore[reportArgumentType]
         )
-        .filter_by(season_id=season.id, played=False)
+        .filter_by(season_id=season.id)
         .order_by(Fixture.fixture_time.asc())
         .all()
     )
-    results = (
-        Fixture.query.options(
-            joinedload(cast(Any, Fixture.home_team)),  # pyright: ignore[reportArgumentType]
-            joinedload(cast(Any, Fixture.away_team)),  # pyright: ignore[reportArgumentType]
-        )
-        .filter_by(season_id=season.id, played=True)
-        .order_by(Fixture.fixture_time.desc())
-        .all()
-    )
+    upcoming = [fixture for fixture in fixtures if not fixture.played]
+    results = [fixture for fixture in reversed(fixtures) if fixture.played]
     return render_template('index.html', table=table_data, upcoming=upcoming, results=results)
 
 
@@ -148,24 +141,32 @@ def add_team(league_slug):
     if existing_team is not None:
         return redirect(url_for('league_dashboard', league_slug=league_slug))
 
+    existing_team_ids = [team_id for team_id, in db.session.query(Team.id).filter_by(season_id=season.id).all()]
+
     new_team = Team()
     new_team.name = name
     new_team.season_id = season.id
     db.session.add(new_team)
     db.session.flush()
 
-    existing_teams = Team.query.filter(Team.season_id == season.id, Team.id != new_team.id).all()
-    for team in existing_teams:
-        home_fixture = Fixture()
-        home_fixture.season_id = season.id
-        home_fixture.home_team_id = team.id
-        home_fixture.away_team_id = new_team.id
-        away_fixture = Fixture()
-        away_fixture.season_id = season.id
-        away_fixture.home_team_id = new_team.id
-        away_fixture.away_team_id = team.id
-        db.session.add(home_fixture)
-        db.session.add(away_fixture)
+    if existing_team_ids:
+        fixture_rows = []
+        for team_id in existing_team_ids:
+            fixture_rows.append(
+                {
+                    'season_id': season.id,
+                    'home_team_id': team_id,
+                    'away_team_id': new_team.id,
+                }
+            )
+            fixture_rows.append(
+                {
+                    'season_id': season.id,
+                    'home_team_id': new_team.id,
+                    'away_team_id': team_id,
+                }
+            )
+        db.session.bulk_insert_mappings(cast(Any, Fixture), fixture_rows)
 
     db.session.commit()
     return redirect(url_for('league_dashboard', league_slug=league_slug))
