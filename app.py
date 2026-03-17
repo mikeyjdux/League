@@ -2,6 +2,7 @@ import os
 from datetime import datetime
 
 from flask import Flask, flash, g, redirect, render_template, request, session, url_for
+from flask_wtf.csrf import CSRFError, CSRFProtect, generate_csrf
 
 from admin import admin_bp
 from auth import auth_bp, ensure_admin_user, login_required
@@ -24,6 +25,7 @@ def env_flag(name):
 
 
 app = Flask(__name__)
+csrf = CSRFProtect(app)
 is_production = os.environ.get('FLASK_ENV') == 'production' or env_flag('RENDER')
 secret_key = os.environ.get('SECRET_KEY')
 if is_production and not secret_key:
@@ -63,6 +65,7 @@ def inject_league_navigation():
         'current_league': getattr(g, 'current_league', None),
         'current_season': getattr(g, 'current_season', None),
         'current_membership': getattr(g, 'current_membership', None),
+        'csrf_token': generate_csrf,
     }
 
 
@@ -237,6 +240,15 @@ def handle_not_found(_error):
         return redirect(url_for('league_dashboard', league_slug=league.slug))
 
     return redirect(url_for('index'))
+
+
+@app.errorhandler(CSRFError)
+def handle_csrf_error(_error):
+    flash('Your session expired or the form token was invalid. Please try again.', 'error')
+    if getattr(g, 'user', None) is None:
+        return redirect(url_for('auth.login'))
+
+    return redirect(request.referrer or url_for('index'))
 
 
 if __name__ == '__main__':

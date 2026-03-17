@@ -37,6 +37,7 @@
             <a href="{{ url_for('admin.admin_overview') }}" class="btn-accent w-full sm:w-auto text-center">All Leagues & Users</a>
             <a href="{{ url_for('league_dashboard', league_slug=current_league.slug) }}" class="btn-brand w-full sm:w-auto text-center">Back to League</a>
             <form action="/logout" method="POST" class="w-full sm:w-auto">
+              {% include '_csrf_token.html' %}
               <button type="submit" class="btn-secondary w-full sm:w-auto">Logout</button>
             </form>
           </div>
@@ -81,6 +82,7 @@
             <span class="chip chip-danger">High impact</span>
           </div>
           <form action="{{ url_for('admin.delete_league_from_admin', league_slug=current_league.slug) }}" method="POST" onsubmit="return confirm('Delete {{ current_league.name }} and all of its data?');" class="mt-4">
+            {% include '_csrf_token.html' %}
             <button type="submit" class="btn-danger w-full sm:w-auto">Delete League</button>
           </form>
         </section>
@@ -106,6 +108,7 @@
                   </div>
                 </div>
                 <form action="{{ url_for('admin.delete_team', league_slug=current_league.slug, team_id=team.id) }}" method="POST" onsubmit="return confirm('Delete {{ team.name }}?');">
+                  {% include '_csrf_token.html' %}
                   <button class="btn-secondary btn-inline-danger">Delete Team</button>
                 </form>
               </div>
@@ -181,6 +184,7 @@
               </div>
 
               <form method="POST" action="{{ url_for('admin.update_managed_fixture', league_slug=current_league.slug, fixture_id=fixture.id) }}" class="glass-card-muted rounded-2xl p-4 fixture-action-card">
+                {% include '_csrf_token.html' %}
                 <div class="admin-form-grid mt-3">
                   <div class="score-inputs">
                     <div class="score-box">
@@ -202,6 +206,7 @@
 
               <div class="fixture-footer mt-4">
                 <form action="{{ url_for('admin.delete_fixture', league_slug=current_league.slug, fixture_id=fixture.id) }}" method="POST" onsubmit="return confirm('Delete this fixture?');">
+                  {% include '_csrf_token.html' %}
                   <button class="btn-secondary btn-inline-danger">Delete Fixture</button>
                 </form>
               </div>

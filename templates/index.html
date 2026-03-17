@@ -72,6 +72,7 @@
             <button onclick="toggleTeamPanel()" class="btn-brand w-full sm:w-auto">Manage Teams</button>
             {% endif %}
             <form action="/logout" method="POST" class="w-full sm:w-auto">
+              {% include '_csrf_token.html' %}
               <button type="submit" class="btn-secondary w-full sm:w-auto">Logout</button>
             </form>
           </div>
@@ -117,6 +118,7 @@
         <div class="empty-state">There is nothing to show here until your account is linked to at least one league.</div>
         {% if g.user.is_admin %}
         <form method="POST" action="{{ url_for('admin.create_league') }}" class="glass-card-muted rounded-2xl p-4">
+          {% include '_csrf_token.html' %}
           <p class="form-kicker">Create your first league</p>
           <div class="space-y-4 mt-3">
             <div class="control-block">
@@ -227,6 +229,7 @@
               {% if (current_membership and current_membership.role == 'moderator') or g.user.is_admin %}
               <div class="section-grid fixture-actions-grid">
                 <form action="{{ url_for('submit_fixture_result', league_slug=current_league.slug, fixture_id=match.id) }}" method="POST" class="glass-card-muted rounded-2xl p-4 fixture-action-card">
+                  {% include '_csrf_token.html' %}
                   <div class="score-inputs mt-3">
                     <div class="score-box">
                       <label class="field-label score-label" for="home_goals_{{ match.id }}" title="{{ match.home_team.name }}">{{ match.home_team.name }}</label>
@@ -241,6 +244,7 @@
                 </form>
 
                 <form action="{{ url_for('reschedule_fixture', league_slug=current_league.slug, fixture_id=match.id) }}" method="POST" class="glass-card-muted rounded-2xl p-4 fixture-action-card fixture-reschedule-card">
+                  {% include '_csrf_token.html' %}
                   <div class="reschedule-controls mt-3">
                     <div class="control-block">
                       <label class="field-label" for="fixture_date_{{ match.id }}">Kickoff time</label>
@@ -302,6 +306,7 @@
     </div>
 
     <form action="{{ url_for('join_league') }}" method="POST" class="glass-card rounded-2xl p-4 space-y-4">
+      {% include '_csrf_token.html' %}
       <div>
         <label class="field-label" for="join_code">League code</label>
         <input id="join_code" type="text" name="join_code" placeholder="AB7K9" required class="w-full mt-2 input-theme rounded-md">
@@ -338,6 +343,7 @@
     </div>
 
     <form action="{{ url_for('add_team', league_slug=current_league.slug) }}" method="POST" class="glass-card rounded-2xl p-4 space-y-4">
+      {% include '_csrf_token.html' %}
       <div>
         <label class="field-label" for="team_name">New team</label>
         <input id="team_name" type="text" name="team_name" placeholder="Enter team name" required class="w-full mt-2 input-theme rounded-md">
