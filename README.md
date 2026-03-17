@@ -11,7 +11,7 @@ Small Flask app for running football leagues with standings, fixtures, league me
 - Global admin tools for leagues, users, and moderator assignment
 - League moderator tools for teams and fixtures
 - Server-rendered league table with upcoming fixtures and recorded results
-- Render-ready deployment via `render.yaml`
+- GitHub Actions deployment over SSH to a Linux server
 
 ## Stack
 
@@ -30,8 +30,9 @@ Small Flask app for running football leagues with standings, fixtures, league me
 - `league.py` - league helpers, join-code helpers, memberships, and context loading
 - `models.py` - SQLAlchemy models for leagues, seasons, memberships, fixtures, and users
 - `templates/` - UI templates and shared styles
-- `render.yaml` - Render service and database config
-- `runtime.txt` - pinned Python version for Render
+- `.github/workflows/deploy.yml` - deploy workflow triggered by pushes to `main`
+- `scripts/deploy_leagueon.sh` - server-side deploy script used by the workflow
+- `runtime.txt` - pinned Python version
 - `AGENTS.md` - coding-agent guidance for this repository
 
 ## Requirements
@@ -40,7 +41,7 @@ Small Flask app for running football leagues with standings, fixtures, league me
 - PostgreSQL database
 - `DATABASE_URL` environment variable
 
-Python version is pinned in `runtime.txt` for Render deployments.
+Python version is pinned in `runtime.txt`.
 
 Install dependencies:
 
@@ -109,7 +110,7 @@ python -m py_compile app.py admin.py auth.py models.py
 ### Template parse check
 
 ```bash
-python -c "from jinja2 import Environment, FileSystemLoader; env=Environment(loader=FileSystemLoader('templates')); [env.get_template(name) for name in ['index.html','admin.html','login.html','_theme_head.html']]; print('templates ok')"
+python -c "from jinja2 import Environment, FileSystemLoader; env=Environment(loader=FileSystemLoader('templates')); [env.get_template(name) for name in ['index.html','admin.html','login.html','_theme_head.html','_csrf_token.html','admin_overview.html']]; print('templates ok')"
 ```
 
 ### Dependency install check
@@ -129,30 +130,52 @@ pytest tests/test_file.py::test_name
 pytest tests/test_file.py::TestClass::test_name
 ```
 
-## Render Deployment
+## Production Deployment
 
-This repo includes a `render.yaml` that defines:
+Production deploys are triggered automatically by GitHub Actions whenever `main` is updated.
 
-- one Python web service
-- one PostgreSQL database
-- build command: `pip install -r requirements.txt`
-- start command: `gunicorn app:app`
+### Production prerequisites
 
-### Deploy on Render
+- The production server hosts the app at `/opt/leagueon/app`.
+- `/opt/leagueon/app` is a git checkout of this repository.
+- The Python virtualenv lives at `/opt/leagueon/app/.venv`.
+- The systemd service is `leagueon.service`.
+- A deploy script is installed on the server at `/opt/leagueon/bin/deploy-leagueon`.
 
-1. Push this repository to GitHub.
-2. In Render, create a new Blueprint instance from the repository.
-3. Render will read `render.yaml` and provision the web service and database.
-4. Set values for:
-   - `LEAGUE_ADMIN_USERNAME`
-   - `LEAGUE_ADMIN_PASSWORD`
-5. `SECRET_KEY` is generated automatically by Render from `render.yaml`.
+### GitHub Actions secrets
 
-### Important deployment notes
+Configure these repository secrets before enabling auto-deploy:
+
+- `SSH_HOST`
+- `SSH_USER`
+- `SSH_PRIVATE_KEY`
+- `SSH_PORT` (optional, defaults to `22`)
+
+### Server deploy script install
+
+Copy `scripts/deploy_leagueon.sh` to `/opt/leagueon/bin/deploy-leagueon` and make it executable:
+
+```bash
+sudo install -d -o leagueon -g leagueon /opt/leagueon/bin
+sudo install -m 0755 scripts/deploy_leagueon.sh /opt/leagueon/bin/deploy-leagueon
+```
+
+The deploy user should be allowed to restart only `leagueon.service` with `sudo`.
+
+### What each deploy does
+
+- fetches `origin/main`
+- resets the production tree to match `origin/main`
+- installs dependencies from `requirements.txt`
+- runs Python syntax and Jinja template checks
+- restarts `leagueon.service`
+
+### Important production notes
 
 - Boot requires a working database connection because `db.create_all()` runs on startup.
 - Production startup fails fast if `SECRET_KEY` is missing.
 - Production startup also fails if `LEAGUE_ADMIN_USERNAME` or `LEAGUE_ADMIN_PASSWORD` is missing and no admin user exists yet.
+- Production deploys are deterministic because the server resets to `origin/main` on every run; do not make manual edits inside `/opt/leagueon/app`.
 
 ## Auth and Permissions
 

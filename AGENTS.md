@@ -7,7 +7,7 @@ Guidance for coding agents working in `/home/mduxbury/Footy/league_simple`.
 - Flask app for managing football leagues, seasons, teams, fixtures, users, and roles.
 - Server-rendered UI with Jinja templates in `templates/`.
 - PostgreSQL-backed data model via Flask-SQLAlchemy.
-- Render deployment configuration lives in `render.yaml`.
+- Production deploys are handled by GitHub Actions over SSH.
 - Current branding is `LeagueOn`.
 
 ## Key Files
@@ -23,6 +23,8 @@ Guidance for coding agents working in `/home/mduxbury/Footy/league_simple`.
 - `templates/login.html` - login and registration UI.
 - `templates/_theme_head.html` - shared theme and component styles.
 - `README.md` - user-facing setup and deployment notes.
+- `.github/workflows/deploy.yml` - production deploy workflow.
+- `scripts/deploy_leagueon.sh` - server-side deploy script.
 
 ## Existing Agent / Editor Rules
 
@@ -63,11 +65,9 @@ Use these validation commands before finishing non-trivial changes:
 - Python syntax check:
   `python -m py_compile app.py admin.py auth.py models.py league.py`
 - Template parse check:
-  `python -c "from jinja2 import Environment, FileSystemLoader; env=Environment(loader=FileSystemLoader('templates')); [env.get_template(name) for name in ['index.html','admin.html','login.html','_theme_head.html','admin_overview.html']]; print('templates ok')"`
+  `python -c "from jinja2 import Environment, FileSystemLoader; env=Environment(loader=FileSystemLoader('templates')); [env.get_template(name) for name in ['index.html','admin.html','login.html','_theme_head.html','_csrf_token.html','admin_overview.html']]; print('templates ok')"`
 - Dependency install sanity check:
   `pip install -r requirements.txt`
-- Render config review:
-  inspect `render.yaml` and verify required env vars are represented.
 
 ## Single-Test Guidance
 
@@ -81,9 +81,11 @@ Use these validation commands before finishing non-trivial changes:
 
 ## Deployment Notes
 
-- Deploy target is Render.
-- Render service and Postgres database are declared in `render.yaml`.
-- Start command is `gunicorn app:app --bind 0.0.0.0:$PORT`.
+- Deploy target is a Linux server reachable over SSH.
+- GitHub Actions triggers production deploys on pushes to `main`.
+- The production app lives at `/opt/leagueon/app`.
+- The production systemd service is `leagueon.service`.
+- The server-side deploy script lives at `/opt/leagueon/bin/deploy-leagueon` and is sourced from `scripts/deploy_leagueon.sh` in the repo.
 - Do not remove production env guards unless explicitly asked.
 - Keep deployment documentation aligned between `README.md` and this file.
 
@@ -191,4 +193,4 @@ Use these validation commands before finishing non-trivial changes:
 - Run the Jinja template parse check.
 - If you changed templates, verify the affected page flow mentally for both desktop and mobile.
 - If you changed auth, invites, or league access, verify both logged-in and logged-out paths.
-- If you changed deployment config, cross-check `render.yaml` and required environment variables.
+- If you changed deployment config, cross-check the GitHub Actions workflow, the deploy script, and required environment variables.
